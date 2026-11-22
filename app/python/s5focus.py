@@ -8,6 +8,7 @@ Commands:
   apply-slot <index> <pcm> <samples> -> guarded per-entry RAM region
   restore                        -> restore the stock ID1 entry
   restore-id <id> <32-byte-hex>  -> restore any entry from a saved hex blob
+  scan [start] [length]          -> read-only map of free (0x55) RAM after 0x8F000000
 
 All writes are RAM-only; a battery pull restores stock behaviour.
 """
@@ -224,16 +225,60 @@ def cmd_restore_id(idx, hexblob):
         svc.close()
 
 
+def classify_block(raw):
+    """Label one 1 KiB block: 5 = 0x55 fill, 0 = zeros, H = LumixTool header, x = other data."""
+    if raw == b"\x55" * len(raw):
+        return "5"
+    if raw == b"\x00" * len(raw):
+        return "0"
+    if decode_header(raw) is not None:
+        return "H"
+    return "x"
+
+
+def summarize_blocks(start, labels, block=1024):
+    """Merge consecutive block labels into [{start, end, kind, kib}] runs."""
+    runs = []
+    for i, kind in enumerate(labels):
+        addr = start + i * block
+        if runs and runs[-1]["kind"] == kind:
+            runs[-1]["end"] = addr + block
+        else:
+            runs.append({"start": addr, "end": addr + block, "kind": kind})
+    names = {"5": "free-0x55", "0": "zero", "H": "lumixtool", "x": "data"}
+    return [{"start": "0x%08X" % r["start"], "end": "0x%08X" % r["end"],
+             "kind": names[r["kind"]], "kib": (r["end"] - r["start"]) // 1024} for r in runs]
+
+
+def cmd_scan(start=0x8F000000, length=0x800000):
+    """Read-only: map which 1 KiB blocks after the scratch base are free."""
+    svc = protocol().Service(settle=0.002)
+    try:
+        start &= ~0x3FF
+        labels = []
+        total = length // 1024
+        for i in range(total):
+            labels.append(classify_block(read_bytes(svc, start + i * 1024, 1024)))
+            if (i + 1) % 256 == 0 or i + 1 == total:
+                print("PROGRESS %d %d" % (i + 1, total), flush=True)
+        print(json.dumps({"ok": True, "start": "0x%08X" % start, "length": length,
+                          "runs": summarize_blocks(start, labels)}))
+    finally:
+        svc.close()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["status", "dump", "apply", "apply-id", "apply-slot",
-                                    "restore", "restore-id"])
+                                    "restore", "restore-id", "scan"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     if a.cmd == "status":
         cmd_status()
     elif a.cmd == "dump":
         cmd_dump()
+    elif a.cmd == "scan":
+        cmd_scan(*(int(x, 0) for x in a.args[:2]))
     elif a.cmd == "apply":
         cmd_apply(a.args[0], int(a.args[1]))
     elif a.cmd in ("apply-id", "apply-slot"):

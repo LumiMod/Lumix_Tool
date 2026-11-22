@@ -12,7 +12,7 @@ const steps = [
 
 export default function ConnectionGuide({ device, navigate, active }) {
   const [step, setStep] = useState(0);
-  const { ready, locked, checking, device: camera } = device;
+  const { ready, actionLocked, checking, device: camera } = device;
   useEffect(() => {
     if (device.driver?.ok) setStep(current => current === 0 ? 1 : current);
     else if (device.driver?.present) setStep(0);
@@ -48,7 +48,7 @@ export default function ConnectionGuide({ device, navigate, active }) {
         <Flex justify="space-between" className="section-actions">
           <Button disabled={step === 0} onClick={() => setStep(step - 1)}>上一步</Button>
           {step < 2 ? <Button type="primary" onClick={() => setStep(step + 1)}>下一步<ArrowRightOutlined /></Button>
-            : <Button id="verifyDevice" type="primary" loading={checking} disabled={locked} icon={ready ? <ArrowRightOutlined /> : <ReloadOutlined />}
+            : <Button id="verifyDevice" type="primary" loading={checking} disabled={actionLocked} icon={ready ? <ArrowRightOutlined /> : <ReloadOutlined />}
               onClick={() => ready ? navigate('focus-sound') : device.refreshDevice()}>{ready ? '开始使用工具' : '检查连接'}</Button>}
         </Flex>
       </Card>

@@ -183,7 +183,7 @@ test('driver INF and scripts have the fixed scope, GUID, result contract and no 
   assert.match(inf, /ClassGuid=\{88BAE032-5A81-49f0-BC3D-A4FF138216D6\}/);
   assert.match(inf, /DeviceInterfaceGUIDs,0x10000,"\{CDE53111-593A-43C9-AB10-EA9DACF2C573\}"/);
   for (const architecture of ['NTamd64', 'NTarm64', 'NTx86']) {
-    const section = inf.split(`[Models.${architecture}]`)[1].split('\n[')[0];
+    const section = inf.replace(/\r\n/g, '\n').split(`[Models.${architecture}]`)[1].split('\n[')[0];
     assert.ok(section.includes('USB\\VID_04DA&PID_2370\n'));
     assert.ok(section.includes('USB\\VID_04DA&PID_2370&MI_00'));
   }

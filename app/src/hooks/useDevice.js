@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const initialState = { env: null, device: {}, driver: null, driverResult: null, driverChecking: false, busy: null, checking: false, configuring: false, progress: null, error: '' };
 const locked = state => !!state.busy || state.checking || state.configuring || state.driverChecking;
+// Background driver polling must not grey out the primary "use the tools" action.
+const actionLocked = state => !!state.busy || state.checking || state.configuring;
 
 export function useDevice(api) {
   const [state, setState] = useState(initialState);
@@ -120,6 +122,7 @@ export function useDevice(api) {
     ...state, api,
     ready: !!state.env?.python && !!state.device.connected && !state.device.error && !state.device.pythonMissing && !!state.device.soundTable?.ok,
     locked: locked(state) || !state.env,
+    actionLocked: actionLocked(state) || !state.env,
     refreshDevice, refreshDriver, runDriver, configureMock, pickPython, runOperation,
   };
 }

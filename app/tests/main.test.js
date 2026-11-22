@@ -68,8 +68,8 @@ async function launch({ dark = false, devUrl, saveResult = { canceled: true } } 
 test('main loads the built React renderer with sandboxed preload and no tool discovery IPC', async () => {
   const { windows: [window], runtime, app, paths, handlers } = await launch();
   assert.equal(app.name, 'LumixTool');
-  assert.equal(paths.userData, '/local/app-data/LumixTool');
-  assert.equal(runtime.options.legacyConfigPath, '/local/app-data/s5-focus-sound/config.json');
+  assert.equal(paths.userData, path.normalize('/local/app-data/LumixTool'));
+  assert.equal(runtime.options.legacyConfigPath, path.normalize('/local/app-data/s5-focus-sound/config.json'));
   assert.equal(window.options.title, 'LumixTool');
   assert.equal(window.options.webPreferences.contextIsolation, true);
   assert.equal(window.options.webPreferences.nodeIntegration, false);

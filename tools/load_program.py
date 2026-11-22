@@ -15,8 +15,10 @@ import s5svc as S
 
 HOOK = 0x8647994C                       # focus-sound wrapper (called on half-press)
 HOOK_ORIG = bytes.fromhex('f0b591b00d460446')   # push/sub/mov r5/mov r4
-PROGRAM_ADDR = 0x8F400000
-MAX_BYTES = 0x100000                    # 1 MiB cap inside the 0x8F scratch area
+# 256 KiB zero hole inside the program image (0x86360000..0x863B0000), so the
+# page is executable exactly like the surrounding code.
+PROGRAM_ADDR = 0x86370000
+MAX_BYTES = 0x40000                     # 256 KiB up to 0x863B0000
 
 
 def open_svc():

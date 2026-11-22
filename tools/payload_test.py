@@ -16,9 +16,10 @@ import s5svc as S
 
 HOOK = 0x8647994C
 HOOK_ORIG = bytes.fromhex('f0b591b00d460446')  # push/sub/mov r5/mov r4
-# Use the ECDSA metadata verifier's code area as payload space: it is known
-# executable memory (0x8F scratch may be marked execute-never).
-PAYLOAD = 0x868C08C6
+# Zero hole inside the program image -> executable page, 256 KiB available.
+PAYLOAD = 0x86370000
+# Kept for the fallback test in the ECDSA verifier's code area.
+VERIFIER = 0x868C08C6
 VERIFIER_ORIG = bytes.fromhex(
     '70b5b0b00d461446064620220146684601f662ee202206f1200108a801f65cee'
     '012110a80cf0f8fe2022294618a801f6deec2022214620a801f6daec202204f1')
@@ -99,11 +100,11 @@ def cmd_restore():
     svc = open_svc()
     try:
         write_bytes(svc, HOOK, HOOK_ORIG)
-        write_bytes(svc, PAYLOAD, VERIFIER_ORIG)
+        write_bytes(svc, PAYLOAD, b'\x00' * len(PAYLOAD_BYTES))
         back = read_bytes(svc, HOOK, len(HOOK_ORIG))
-        ver = read_bytes(svc, PAYLOAD, len(VERIFIER_ORIG))
-        print(json.dumps({'ok': back == HOOK_ORIG and ver == VERIFIER_ORIG,
-                          'hook': back.hex(), 'verifier': ver[:16].hex()}))
+        area = read_bytes(svc, PAYLOAD, len(PAYLOAD_BYTES))
+        print(json.dumps({'ok': back == HOOK_ORIG and area == b'\x00' * len(PAYLOAD_BYTES),
+                          'hook': back.hex(), 'area': area.hex()}))
     finally:
         svc.close()
 

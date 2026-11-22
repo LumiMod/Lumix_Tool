@@ -90,7 +90,7 @@ test('batch insufficient space reports needed, total and largest before any writ
   assert.equal(result.largestFree, 1024);
   assert.deepEqual(result.allocations, []);
   assert.deepEqual(result.succeeded, []);
-  assert.match(result.error, /需新分配 2 KiB.*可用 1 KiB.*最大连续空闲 1 KiB/);
+  assert.match(result.error, /需新分配 2 KiB.*可用 1 KiB.*最大连续可写入 1 KiB/);
   assert.equal(writes, 0);
 });
 
@@ -209,4 +209,15 @@ test('live writes scan first when this body has no map and pass an explicit addr
   assert.ok(events.some(event => event.phase === 'scan'));
   assert.equal(runtime.memoryMap('0x0280').map, null);
   assert.equal(runtime.memoryMap('0x0290').map.runs[0].kind, 'lumixtool');
+});
+
+test('adjacent writable runs of different kinds merge into one contiguous range', () => {
+  const map = mockMemoryMap();
+  const stats = memoryStats(map, [owned(1, START, 100)]);
+  // Everything except #1's 1 KiB is writable and contiguous.
+  assert.equal(stats.largestFree, END - START - 1024);
+  assert.equal(stats.totalFree, END - START - 1024);
+  const big = planAllocation(map, [owned(1, START, 100)], [2], 132300);
+  assert.equal(big.ok, true);
+  assert.equal(big.allocations[0].start, START + 1024);
 });

@@ -57,7 +57,15 @@ function freeRanges(map, excluded = []) {
     }
     ranges.push(...parts);
   }
-  return ranges;
+  // Since 730faad free-0x55, zero and data runs are all writable, so adjacent
+  // runs of different kinds form one contiguous writable range.
+  ranges.sort((a, b) => a.start - b.start);
+  return ranges.reduce((merged, range) => {
+    const last = merged.at(-1);
+    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+    else merged.push({ ...range });
+    return merged;
+  }, []);
 }
 
 export function memoryStats(map, entries = []) {
@@ -98,7 +106,7 @@ export function planAllocation(map, entries, indices, samples) {
       const available = freeRanges(map, [...live.filter(item => item.index !== index), ...allocations]);
       const fit = available.find(item => item.end - item.start >= need);
       if (!fit) return { ok: false, code: 'insufficient-space', allocations: [], need, needed, ...stats,
-        error: `内存空间不足：需新分配 ${needed / BLOCK} KiB（每项 ${need / BLOCK} KiB）；可用 ${stats.totalFree / BLOCK} KiB，最大连续空闲 ${stats.largestFree / BLOCK} KiB。请减少音效数量或时长，或重新扫描内存。` };
+        error: `内存空间不足：需新分配 ${needed / BLOCK} KiB（每项 ${need / BLOCK} KiB）；可用 ${stats.totalFree / BLOCK} KiB，最大连续可写入 ${stats.largestFree / BLOCK} KiB。请减少音效数量或时长，或重新扫描内存。` };
       chosen = fit;
     }
     allocations.push({ index, start: chosen.start, end: chosen.start + need, bytes: need,

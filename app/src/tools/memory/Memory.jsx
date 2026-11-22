@@ -60,10 +60,10 @@ export default function Memory({ device }) {
     </Card>
     <Card title="空间概览">
       <Descriptions column={{ xs: 1, sm: 2, xl: 3 }} items={[
-        ['free', '总空闲', stats.totalFree], ['largest', '最大连续空闲', stats.largestFree],
+        ['free', '可写入空间', stats.totalFree], ['largest', '最大连续可写入', stats.largestFree],
         ['used', 'LumixTool 当前使用', stats.used], ['data', '其他数据', stats.data], ['zero', '全零', stats.zero],
       ].map(([key, label, value]) => ({ key, label, children: map || key === 'used' ? `${(value / BLOCK).toLocaleString()} KiB` : '—' }))} />
-      <Paragraph type="secondary">当前使用量来自音效表，结束地址向上取整到 1 KiB。已恢复或搬迁的旧 PCM 不会自动清除，也不会被当作空闲空间。</Paragraph>
+      <Paragraph type="secondary">当前使用量来自音效表，结束地址向上取整到 1 KiB。可写入空间包括空闲（0x55）、全零和其他数据区段（暂存区热重启后会残留旧数据，残留数据可以覆盖），只排除 LumixTool 当前占用的区域。</Paragraph>
       <Space wrap>{KINDS.map(kind => <Space key={kind}><span className="memory-legend" style={{ background: colors[kind] }} /><Text>{names[kind]}</Text></Space>)}</Space>
       <div id="memoryMap" className="memory-map" role="img" aria-label="RAM 暂存区内存分布" style={{ background: token.colorFillSecondary }}>
         {displayMap?.runs.map(item => <Tooltip key={item.start} title={`${names[item.kind]} · ${item.start}–${item.end}（结束地址不含） · ${item.kib} KiB`}>

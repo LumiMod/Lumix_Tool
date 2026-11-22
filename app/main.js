@@ -55,7 +55,22 @@ function createWindow() {
   win.webContents.on('did-fail-load', (_event, code, description) => logLine(`PAGE LOAD FAILED ${code} ${description}`));
   // Electron 45 uses the console-message event's details object.
   win.webContents.on('console-message', event => logLine(`RENDERER: ${event.level} ${event.message}`));
-  win.webContents.on('render-process-gone', (_event, details) => logLine(`RENDERER EXIT: ${details.reason}`));
+  win.webContents.on('render-process-gone', (_event, details) => {
+    logLine(`RENDERER EXIT: ${details.reason} (exitCode ${details.exitCode}) appDir=${path.dirname(process.execPath)}`);
+    if (details.reason !== 'launch-failed') return;
+    // Chromium's sandboxed renderer runs with a restricted token that can only
+    // read files the Users/Everyone groups may read. Folders whose ACL grants
+    // only the owner (seen on a custom-ACL data drive) make it fail to start,
+    // and the app would otherwise exit without ever showing a window.
+    const appDir = path.dirname(process.execPath);
+    dialog.showMessageBoxSync({
+      type: 'error', title: 'LumixTool 无法启动',
+      message: 'LumixTool 的界面进程无法读取程序文件，窗口打不开。',
+      detail: `程序所在文件夹：\n${appDir}\n\n这个文件夹的权限只允许你的账户访问，Windows 的界面沙箱进程读不到其中的文件。\n\n解决办法（任选其一）：\n1. 把整个 LumixTool 文件夹移到桌面或「文档」等系统默认目录再运行；\n2. 在 cmd 中给 Users 组读取权限：\n   icacls "${appDir}" /grant *S-1-5-32-545:(OI)(CI)RX /T`,
+      buttons: ['退出'],
+    });
+    app.quit();
+  });
   win.once('ready-to-show', () => win?.show());
   win.webContents.once('did-finish-load', () => logLine('PAGE LOADED'));
   win.on('close', event => {
@@ -120,6 +135,19 @@ ipcMain.handle('open-external', async (_event, url) => {
   catch (error) { return { ok: false, error: error.message }; }
 });
 ipcMain.handle('dump', () => deviceOperation('dump', () => runtime.inspect()));
+ipcMain.handle('scan-memory', () => deviceOperation('scan-memory', () => runtime.scanMemory()));
+ipcMain.handle('memory-map', (_event, version) => runtime.memoryMap(version));
+ipcMain.handle('export-memory', (_event, version) => deviceOperation('export-memory', async () => {
+  const cached = runtime.memoryMap(version);
+  if (!cached.ok || !cached.map) return { ok: false, error: cached.error || '请先扫描内存。' };
+  const result = await dialog.showSaveDialog(win, {
+    title: '导出内存扫描 JSON', defaultPath: `LumixTool-memory-${cached.map.bodyVersion}.json`,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (result.canceled || !result.filePath) return { ok: true, canceled: true };
+  await fs.promises.writeFile(result.filePath, JSON.stringify(cached.map, null, 2), 'utf8');
+  return { ok: true };
+}));
 ipcMain.handle('apply-slot', (_event, payload) => deviceOperation('apply-slot', () => runtime.soundBatch('apply', { ...payload, indices: [payload?.index] })));
 ipcMain.handle('apply-slots', (_event, payload) => deviceOperation('apply-slots', () => runtime.soundBatch('apply', payload)));
 ipcMain.handle('restore-id', (_event, payload) => deviceOperation('restore-id', () => runtime.soundBatch('restore', { ...payload, indices: [payload?.index] })));

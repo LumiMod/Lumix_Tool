@@ -1,6 +1,6 @@
 {
   "name": "lumixtool",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "LumixTool — a local toolkit for Panasonic LUMIX cameras",
   "main": "main.js",
   "scripts": {
@@ -31,6 +31,7 @@
       "main.js",
       "preload.js",
       "runtime.js",
+      "memory.mjs",
       "driver.js",
       "mock-sound-table.json",
       "package.json",

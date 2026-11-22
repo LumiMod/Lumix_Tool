@@ -5,8 +5,9 @@ const { spawn } = require('node:child_process');
 const { StringDecoder } = require('node:string_decoder');
 const { DriverManager, DRIVER_SCENARIOS, DRIVER_RESULTS } = require('./driver');
 const mockTable = require('./mock-sound-table.json');
-const SCRATCH_VIRTUAL = 0x0F000100;
-const REGION_STRIDE = 0x42000;
+const { START, END, BLOCK, validMap, liveRegions, planAllocation, markRange, mockMemoryMap, hexAddress } = require('./memory.mjs');
+const SCRATCH_VIRTUAL = START - 0x80000000;
+const isScratch = addr => Number(addr) >= SCRATCH_VIRTUAL && Number(addr) < END - 0x80000000;
 const validIndex = index => Number.isInteger(index) && index >= 0 && index < 28;
 const validHex = hex => typeof hex === 'string' && /^[0-9a-f]{64}$/i.test(hex);
 
@@ -51,6 +52,13 @@ class Runtime {
     this.driver = new DriverManager({ platform, mock, mockState: this.mockState });
     this.mockEntries = mockTable.map(entry => ({ ...entry }));
     this.soundsPath = path.join(path.dirname(configPath), mock ? 'sounds-mock.json' : 'sounds.json');
+    this.memoryPath = path.join(path.dirname(configPath), mock ? 'memory-maps-mock.json' : 'memory-maps.json');
+    if (mock) {
+      this.mockRam = Buffer.alloc(END - START, 0x55);
+      for (const item of mockMemoryMap().runs) if (item.kind !== 'free-0x55') {
+        this.mockRam.fill(item.kind === 'zero' ? 0 : 0xA7, Number(item.start) - START, Number(item.end) - START);
+      }
+    }
     this.batchContext = null;
     // Never overwrite the new config, even if the legacy file is newer.
     if (!fs.existsSync(configPath) && fs.existsSync(legacyConfigPath)) {
@@ -79,6 +87,7 @@ class Runtime {
   }
 
   emitProgress(progress) {
+    if (this.progressPhase) progress = { ...progress, phase: this.progressPhase };
     const batch = this.batchContext;
     this.onProgress(batch ? { ...progress, ...batch,
       overallDone: batch.completedUnits + progress.done,
@@ -121,7 +130,67 @@ class Runtime {
     if (!status.connected || status.error) return status;
     const soundTable = await this.soundTable(status.body_version);
     return { ...status, soundTable, ...(soundTable.ok ? {} : { error: soundTable.error }),
-      custom: soundTable.ok ? soundTable.entries.some(e => Number(e.addr) >= SCRATCH_VIRTUAL) : status.custom };
+      memoryMap: this.memoryMap(status.body_version).map,
+      custom: soundTable.ok ? liveRegions(soundTable.entries).length > 0 : status.custom };
+  }
+
+  loadMemoryMaps() {
+    try {
+      const maps = JSON.parse(fs.readFileSync(this.memoryPath, 'utf8'));
+      return maps && typeof maps === 'object' && !Array.isArray(maps) ? maps : {};
+    }
+    catch (error) {
+      if (error.code === 'ENOENT' || error instanceof SyntaxError) return {};
+      throw new Error(`无法读取内存扫描缓存，请检查 ${this.memoryPath}：${error.message}`);
+    }
+  }
+
+  memoryMap(version) {
+    if (typeof version !== 'string' || !/^0x[0-9a-f]{4}$/i.test(version)) return { ok: false, map: null, error: '无法识别机身版本。' };
+    const key = version.toLowerCase();
+    const map = this.loadMemoryMaps()[key];
+    return { ok: true, map: validMap(map) && map.bodyVersion === key ? map : null };
+  }
+
+  saveMemoryMap(map) {
+    if (!validMap(map)) throw new Error('内存扫描数据无效，请重新扫描。');
+    const maps = this.loadMemoryMaps();
+    maps[map.bodyVersion] = map;
+    fs.mkdirSync(path.dirname(this.memoryPath), { recursive: true });
+    fs.writeFileSync(`${this.memoryPath}.tmp`, JSON.stringify(maps, null, 2));
+    fs.renameSync(`${this.memoryPath}.tmp`, this.memoryPath);
+  }
+
+  async scanMemory(expectedVersion) {
+    const status = await this.status();
+    if (!status.connected || status.error || !/^0x[0-9a-f]{4}$/i.test(status.body_version)) return { ok: false, error: status.error || '请先连接相机。' };
+    const bodyVersion = status.body_version.toLowerCase();
+    if (expectedVersion && expectedVersion.toLowerCase() !== bodyVersion) return { ok: false, error: '机身版本已变化，请刷新后重新扫描。' };
+    this.progressPhase = 'scan';
+    this.emitProgress({ done: 0, total: (END - START) / BLOCK });
+    try {
+      let result;
+      if (this.mock) {
+        for (let step = 1; step <= 20; step++) {
+          await new Promise(resolve => setTimeout(resolve, 150));
+          this.emitProgress({ done: Math.round((END - START) / BLOCK * step / 20), total: (END - START) / BLOCK });
+        }
+        const runs = [];
+        for (let offset = 0; offset < this.mockRam.length; offset += BLOCK) {
+          const block = this.mockRam.subarray(offset, offset + BLOCK);
+          const kind = block.every(value => value === 0x55) ? 'free-0x55' : block.every(value => value === 0) ? 'zero'
+            : block.subarray(0, 8).toString() === 'LMXTSLOT' ? 'lumixtool' : 'data';
+          const previous = runs.at(-1);
+          if (previous?.kind === kind) { previous.end = hexAddress(START + offset + BLOCK); previous.kib++; }
+          else runs.push({ start: hexAddress(START + offset), end: hexAddress(START + offset + BLOCK), kind, kib: 1 });
+        }
+        result = { ok: true, start: hexAddress(START), length: END - START, runs };
+      } else result = await this.run(['scan']);
+      if (!result.ok) return result;
+      const map = { scannedAt: new Date().toISOString(), bodyVersion, start: result.start, length: result.length, runs: result.runs };
+      this.saveMemoryMap(map);
+      return { ok: true, map };
+    } finally { this.progressPhase = null; }
   }
 
   renameSound({ version, index, label } = {}) {
@@ -222,6 +291,7 @@ class Runtime {
     if (!this.mock) return { ok: false, error: '模拟模式未启用。' };
     if (['connected', 'disconnected', 'error', 'python-missing', 'region-not-free'].includes(options.scenario)) {
       this.mockState.scenario = options.scenario;
+      this.mockState.staleNext = options.scenario === 'region-not-free';
     }
     if (typeof options.failNext === 'boolean') this.mockState.failNext = options.failNext;
     if (DRIVER_SCENARIOS.includes(options.driverScenario)) this.mockState.driverScenario = options.driverScenario;
@@ -247,22 +317,9 @@ class Runtime {
   }
 
   async apply(payload) {
-    if (!payload || !Number.isInteger(payload.samples) || payload.samples < 1 || payload.samples > 132300) {
-      return { ok: false, error: '采样数量无效：音频必须大于 0 秒且不超过 3 秒。' };
-    }
-    const pcm = Buffer.from(payload.pcm);
-    if (pcm.length !== payload.samples * 2) return { ok: false, error: 'PCM size mismatch' };
-    if (this.mock) {
-      const result = await this.applySlot({ ...payload, index: 1 });
-      return result.ok ? { ok: true } : result;
-    }
-    if (this.platform !== 'win32') return { ok: false, error: '实机写入需要 Windows WinUSB 环境。' };
-    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lumixtool-'));
-    const filename = path.join(directory, 'audio.pcm');
-    try {
-      fs.writeFileSync(filename, pcm);
-      return await this.run(['apply', filename, String(payload.samples)]);
-    } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+    // Compatibility IPC uses the same allocator, never a hidden fixed address.
+    const result = await this.soundBatch('apply', { ...payload, indices: [1] });
+    return result.ok ? { ok: true } : result;
   }
 
   async restore() {
@@ -277,18 +334,32 @@ class Runtime {
   async applySlot(payload) {
     const pcm = pcmBuffer(payload);
     if (!validIndex(payload.index)) throw new Error('音效编号必须为 0–27。');
+    const addr = payload.regionAddr;
+    if (!Number.isInteger(addr) || addr % BLOCK || addr < START || addr + 16 + pcm.length > END) throw new Error('写入地址必须按 1 KiB 对齐，且完整位于 RAM 暂存区。');
     if (this.mock) {
-      if (this.mockState.scenario === 'region-not-free' && payload.index === 20) {
-        const address = `0x${(0x8F000100 + 21 * REGION_STRIDE).toString(16).toUpperCase()}`;
-        return { ok: false, error: 'region not free', address, index: 20 };
+      if (this.mockState.staleNext) {
+        this.mockState.staleNext = false;
+        this.mockRam[addr - START] = 0xA7;
+      }
+      const span = this.mockRam.subarray(addr - START, addr - START + 16 + pcm.length);
+      const oldSamples = span.readUInt32LE(12);
+      const owned = span.subarray(0, 8).toString() === 'LMXTSLOT' && span.readUInt32LE(8) === payload.index &&
+        oldSamples > 0 && oldSamples <= 132300 && addr + 16 + oldSamples * 2 <= END;
+      if (!span.every(byte => byte === 0x55) && !(owned && span.subarray(16 + oldSamples * 2).every(byte => byte === 0x55))) {
+        return { ok: false, error: 'region not free', address: hexAddress(addr), index: payload.index };
       }
       const result = await this.mockOperation('apply', payload.samples);
       if (!result.ok) return result;
       const raw = Buffer.from(this.mockEntries[payload.index].hex, 'hex');
-      const addr = SCRATCH_VIRTUAL + (payload.index + 1) * REGION_STRIDE + 16;
-      raw.writeUInt32LE(addr, 4);
+      span.write('LMXTSLOT', 0);
+      span.writeUInt32LE(payload.index, 8);
+      span.writeUInt32LE(payload.samples, 12);
+      pcm.copy(span, 16);
+      const virtual = addr + 16 - 0x80000000;
+      raw.writeUInt32LE(virtual, 4);
       raw.writeUInt32LE(payload.samples, 0x14);
-      this.mockEntries[payload.index] = { ...this.mockEntries[payload.index], addr: `0x${addr.toString(16).padStart(8, '0').toUpperCase()}`, size: payload.samples, hex: raw.toString('hex') };
+      this.mockEntries[payload.index] = { ...this.mockEntries[payload.index], addr: hexAddress(virtual), size: payload.samples, hex: raw.toString('hex') };
+      this.mockState.custom = true;
       return { ok: true, index: payload.index, entry: raw.toString('hex') };
     }
     if (this.platform !== 'win32') return { ok: false, error: '实机写入需要 Windows WinUSB 环境。' };
@@ -296,7 +367,7 @@ class Runtime {
     const filename = path.join(directory, 'audio.pcm');
     try {
       fs.writeFileSync(filename, pcm);
-      return await this.run(['apply-slot', String(payload.index), filename, String(payload.samples)]);
+      return await this.run(['apply-slot', String(payload.index), filename, String(payload.samples), hexAddress(addr)]);
     } finally { fs.rmSync(directory, { recursive: true, force: true }); }
   }
 
@@ -310,7 +381,7 @@ class Runtime {
       const raw = Buffer.from(hex, 'hex');
       this.mockEntries[index] = { ...this.mockEntries[index], hex,
         addr: `0x${raw.readUInt32LE(4).toString(16).padStart(8, '0').toUpperCase()}`, size: raw.readUInt32LE(0x14) };
-      this.mockState.custom = this.mockEntries.some(entry => Number(entry.addr) >= SCRATCH_VIRTUAL);
+      this.mockState.custom = this.mockEntries.some(entry => isScratch(entry.addr));
       return { ok: true, index, entry: hex };
     }
     if (this.platform !== 'win32') return { ok: false, error: '实机恢复需要 Windows WinUSB 环境。' };
@@ -336,14 +407,37 @@ class Runtime {
         indices ||= Object.keys(originals).map(Number).filter(validIndex);
         if (!indices.length || indices.some(index => !validHex(originals[index]))) throw new Error('没有可用的原始表项，无法单独恢复（拔电池可恢复）。');
       }
+      let map, plan;
+      if (kind === 'apply') {
+        map = this.memoryMap(device.soundTable.version).map;
+        if (!map) {
+          const scan = await this.scanMemory(device.soundTable.version);
+          if (!scan.ok) return { ...scan, succeeded };
+          map = scan.map;
+        }
+        plan = planAllocation(map, device.soundTable.entries, indices, payload.samples);
+        if (!plan.ok) return { ...plan, succeeded };
+      }
       const total = kind === 'apply' ? payload.samples : 32;
       for (const [position, index] of indices.entries()) {
         this.batchContext = { index, position: position + 1, count: indices.length, completedUnits: succeeded.length * total };
         this.emitProgress({ done: 0, total });
         let result;
         try {
-          result = kind === 'apply' ? await this.applySlot({ ...payload, index }) : await this.restoreId(index, originals[index]);
+          result = kind === 'apply' ? await this.applySlot({ ...payload, index, regionAddr: plan.allocations[position].start }) : await this.restoreId(index, originals[index]);
         } catch (error) { result = { ok: false, error: error.message || String(error) }; }
+        if (kind === 'apply' && (result.ok || result.error === 'region not free')) {
+          const allocation = plan.allocations[position];
+          map = markRange(map, allocation.start, allocation.end, result.ok ? 'lumixtool' : 'data');
+          if (!result.ok) result = { ...result, code: 'stale-map', rescan: true,
+            error: `目标区域 ${result.address || allocation.address} 已被占用，内存扫描缓存可能已过期；本项未写入，请重新扫描内存后再试。` };
+          // Record a successful device write even if saving the local cache fails.
+          try { this.saveMemoryMap(map); }
+          catch (error) {
+            if (result.ok) succeeded.push(index);
+            return { ok: false, error: `内存缓存保存失败：${error.message}`, failedIndex: index, succeeded, pending: indices.slice(position + 1) };
+          }
+        }
         if (!result.ok) return { ...result, failedIndex: index, succeeded, pending: indices.slice(position + 1) };
         succeeded.push(index);
         this.emitProgress({ done: total, total });

@@ -21,7 +21,7 @@ export default function Settings({ device }) {
         {feedback && <Alert id="settingsFeedback" showIcon type={feedback.ok ? 'info' : 'error'} title={feedback.ok ? 'Python 路径已保存，已重新检查设备。' : feedback.error} />}
       </Space>
     </Card>
-    <Card title="关于 LumixTool" extra={<Tag>v0.1.0</Tag>}>
+    <Card title="关于 LumixTool" extra={<Tag>v{__APP_VERSION__}</Tag>}>
       <Descriptions column={1} items={[
         { key: 'camera', label: '当前支持', children: 'Panasonic DC-S5 · 28 项音效替换' },
         { key: 'mode', label: '运行方式', children: env?.mock ? '模拟模式 · 不访问相机' : '本地运行 · 离线' },

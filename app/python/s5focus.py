@@ -3,9 +3,9 @@
 Commands:
   status                         -> JSON device/table state
   dump                           -> JSON of all 28 sound-table entries
-  apply <pcm-file> <samples>     -> upload PCM and retarget ID1 (focus beep)
-  apply-id <id> <pcm> <samples>  -> alias for apply-slot
-  apply-slot <index> <pcm> <samples> -> guarded per-entry RAM region
+  apply <pcm-file> <samples> <region_addr> -> upload PCM and retarget ID1
+  apply-id <id> <pcm> <samples> <region_addr> -> alias for apply-slot
+  apply-slot <index> <pcm> <samples> <region_addr> -> guarded physical region
   restore                        -> restore the stock ID1 entry
   restore-id <id> <32-byte-hex>  -> restore any entry from a saved hex blob
   scan [start] [length]          -> read-only map of free (0x55) RAM after 0x8F000000
@@ -32,10 +32,8 @@ def protocol():
 
 TBL = 0x86E35100
 ID1 = TBL + 32
-PCM_ADDR = 0x8F000100
-PCM_VIRT = 0x0F000100
-REGION_BASE = PCM_ADDR
-REGION_STRIDE = 0x42000
+SCRATCH_START = 0x8F000000
+SCRATCH_END = 0x8F800000
 HEADER_MAGIC = b"LMXTSLOT"
 HEADER_SIZE = 16
 SLOT_COUNT = 28
@@ -69,8 +67,12 @@ def entry_addr(idx):
     return TBL + validate_index(idx) * 32
 
 
-def region_addr(idx):
-    return REGION_BASE + (validate_index(idx) + 1) * REGION_STRIDE
+def validate_region(addr, samples):
+    if (type(addr) is not int or addr % 1024 != 0
+            or not SCRATCH_START <= addr < SCRATCH_END
+            or addr + HEADER_SIZE + samples * 2 > SCRATCH_END):
+        raise ValueError("region address must be 1 KiB aligned and span within 0x8F000000..0x8F800000")
+    return addr
 
 
 def encode_header(idx, samples):
@@ -84,15 +86,19 @@ def decode_header(raw):
     if len(raw) < HEADER_SIZE:
         return None
     magic, idx, samples = struct.unpack_from("<8sII", raw)
-    return (idx, samples) if magic == HEADER_MAGIC else None
+    return ((idx, samples) if magic == HEADER_MAGIC and 0 <= idx < SLOT_COUNT
+            and 0 < samples <= MAX_SAMPLES else None)
 
 
 def region_is_free(raw, idx):
     validate_index(idx)
-    if len(raw) != REGION_STRIDE:
-        return False
+    if raw == b"\x55" * len(raw):
+        return True
     header = decode_header(raw)
-    return (header is not None and header[0] == idx) or raw == b"\x55" * REGION_STRIDE
+    if header is None or header[0] != idx:
+        return False
+    tail = raw[HEADER_SIZE + header[1] * 2:]
+    return tail == b"\x55" * len(tail)
 
 
 class RegionNotFree(RuntimeError):
@@ -101,9 +107,12 @@ class RegionNotFree(RuntimeError):
         self.address = "0x%08X" % addr
 
 
-def guard_region(svc, idx):
-    addr = region_addr(idx)
-    if not region_is_free(read_bytes(svc, addr, REGION_STRIDE), idx):
+def guard_region(svc, idx, samples, addr):
+    validate_region(addr, samples)
+    raw = read_bytes(svc, addr, HEADER_SIZE + samples * 2)
+    old_header = decode_header(raw)
+    if (old_header and addr + HEADER_SIZE + old_header[1] * 2 > SCRATCH_END
+            or not region_is_free(raw, idx)):
         raise RegionNotFree(addr)
     return addr
 
@@ -123,7 +132,7 @@ def cmd_status():
             "connected": True,
             "id1_addr": "0x%08X" % addr,
             "id1_size": size,
-            "custom": addr >= PCM_VIRT,
+            "custom": SCRATCH_START - 0x80000000 <= addr < SCRATCH_END - 0x80000000,
             "body_version": "0x%04X" % ver,
         }))
     except Exception as exc:
@@ -158,15 +167,15 @@ def write_halfwords(svc, addr, data):
                                               struct.unpack_from("<H", data, offset)[0]))
 
 
-def write_pcm(svc, path, samples, idx=1):
-    # Validate all inputs before the guard, and guard the ENTIRE region before
-    # writing even its header. Never infer free space from a small prefix.
+def write_pcm(svc, path, samples, idx, region_addr):
+    # Guard the exact header + PCM span before writing even its header.
     header = encode_header(idx, samples)
+    validate_region(region_addr, samples)
     with open(path, "rb") as source:
         data = source.read()
     if len(data) != samples * 2:
         raise RuntimeError("PCM size mismatch")
-    addr = guard_region(svc, idx)
+    addr = guard_region(svc, idx, samples, region_addr)
     write_halfwords(svc, addr, header)
     for i in range(samples):
         write_halfwords(svc, addr + HEADER_SIZE + i * 2, data[i * 2:i * 2 + 2])
@@ -182,11 +191,15 @@ def retarget(svc, idx, samples, pcm_virt):
     return read_bytes(svc, base, 32)
 
 
-def cmd_apply(path, samples, idx=1):
+def cmd_apply(path, samples, idx, region_addr):
     encode_header(idx, samples)
+    validate_region(region_addr, samples)
+    # File/address validation also precedes opening the device.
+    if os.path.getsize(path) != samples * 2:
+        raise RuntimeError("PCM size mismatch")
     svc = protocol().Service(settle=0.002)
     try:
-        pcm_virt = write_pcm(svc, path, samples, idx)
+        pcm_virt = write_pcm(svc, path, samples, idx, region_addr)
         e = retarget(svc, idx, samples, pcm_virt)
         ok = (struct.unpack_from("<I", e, 4)[0] == pcm_virt
               and struct.unpack_from("<I", e, 0x14)[0] == samples)
@@ -252,9 +265,11 @@ def summarize_blocks(start, labels, block=1024):
 
 def cmd_scan(start=0x8F000000, length=0x800000):
     """Read-only: map which 1 KiB blocks after the scratch base are free."""
+    if (start % 1024 or length <= 0 or length % 1024
+            or start < SCRATCH_START or start + length > SCRATCH_END):
+        raise ValueError("scan range must be 1 KiB aligned within scratch RAM")
     svc = protocol().Service(settle=0.002)
     try:
-        start &= ~0x3FF
         labels = []
         total = length // 1024
         for i in range(total):
@@ -280,9 +295,13 @@ def main():
     elif a.cmd == "scan":
         cmd_scan(*(int(x, 0) for x in a.args[:2]))
     elif a.cmd == "apply":
-        cmd_apply(a.args[0], int(a.args[1]))
+        if len(a.args) != 3:
+            raise ValueError("apply requires <pcm> <samples> <region_addr>")
+        cmd_apply(a.args[0], int(a.args[1]), 1, int(a.args[2], 0))
     elif a.cmd in ("apply-id", "apply-slot"):
-        cmd_apply(a.args[1], int(a.args[2]), int(a.args[0]))
+        if len(a.args) != 4:
+            raise ValueError("apply-slot/apply-id requires <index> <pcm> <samples> <region_addr>")
+        cmd_apply(a.args[1], int(a.args[2]), int(a.args[0]), int(a.args[3], 0))
     elif a.cmd == "restore":
         cmd_restore()
     else:

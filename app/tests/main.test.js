@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
 
-async function launch({ dark = false, devUrl } = {}) {
+async function launch({ dark = false, devUrl, saveResult = { canceled: true } } = {}) {
   const handlers = new Map();
   const windows = [];
   const calls = [];
@@ -50,11 +50,16 @@ async function launch({ dark = false, devUrl } = {}) {
   Object.assign(fakeProcess, { env: { LUMIXTOOL_DEV_URL: devUrl }, platform: 'darwin', exit: () => { throw new Error('unexpected exit'); } });
   const nativeTheme = new EventEmitter();
   nativeTheme.shouldUseDarkColors = dark;
-  const electron = { app, BrowserWindow, ipcMain, nativeTheme, shell: { openExternal: async url => { calls.push(url); } }, dialog: { showMessageBoxSync: () => 0 } };
+  const electron = { app, BrowserWindow, ipcMain, nativeTheme, shell: { openExternal: async url => { calls.push(url); } }, dialog: {
+    showMessageBoxSync: () => 0,
+    showSaveDialog: async (_window, options) => { calls.push({ saveDialog: options }); return saveResult; },
+  } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8'), {
     __dirname: path.resolve(__dirname, '..'), process: fakeProcess,
     require: name => name === 'electron' ? electron : name === './runtime' ? { Runtime }
-      : name === 'node:fs' ? { ...fs, appendFileSync() {}, mkdirSync() {} } : require(name),
+      : name === 'node:fs' ? { ...fs, appendFileSync() {}, mkdirSync() {}, promises: {
+        ...fs.promises, writeFile: async (filename, data) => { calls.push({ filename, data }); },
+      } } : require(name),
   });
   await Promise.resolve();
   return { handlers, windows, calls, runtime, app, paths, nativeTheme };
@@ -230,4 +235,48 @@ test('Vite development HTML keeps refresh scripts external and only adds the loc
     assert.ok(script.includes('from "/@react-refresh"'));
     assert.ok(!script.includes('__BASE__'));
   } finally { await server.close(); }
+});
+
+test('memory scan holds the shared device lock and forwards scan progress', async () => {
+  const { handlers, runtime, calls } = await launch();
+  let finish;
+  runtime.scanMemory = () => new Promise(resolve => { finish = resolve; });
+  runtime.memoryMap = version => ({ ok: true, map: { bodyVersion: version } });
+  const pending = handlers.get('scan-memory')();
+  for (const channel of ['status', 'dump', 'apply-slots', 'restore-id', 'driver-install', 'scan-memory']) {
+    assert.equal((await handlers.get(channel)({}, {})).busy, true, channel);
+  }
+  runtime.options.onProgress({ phase: 'scan', done: 1024, total: 8192 });
+  assert.equal(calls.at(-1)[1].phase, 'scan');
+  assert.equal(handlers.get('memory-map')({}, '0x0290').map.bodyVersion, '0x0290');
+  finish({ ok: true });
+  assert.equal((await pending).ok, true);
+  assert.equal((await handlers.get('status')()).connected, false);
+});
+
+test('memory export saves the main-process cached map through a native dialog', async () => {
+  const { handlers, runtime, calls } = await launch({ saveResult: { canceled: false, filePath: '/tmp/map.json' } });
+  const map = { bodyVersion: '0x0290', scannedAt: 'now', start: '0x8F000000', length: 1024, runs: [] };
+  runtime.memoryMap = version => ({ ok: true, map: version === '0x0290' ? map : null });
+  assert.equal((await handlers.get('export-memory')({}, '0x0208')).ok, false);
+  assert.equal(calls.length, 0);
+  assert.equal((await handlers.get('export-memory')({}, '0x0290')).ok, true);
+  assert.equal(calls[0].saveDialog.defaultPath, 'LumixTool-memory-0x0290.json');
+  assert.equal(calls[1].filename, '/tmp/map.json');
+  assert.deepEqual(JSON.parse(calls[1].data), map);
+  const canceled = await launch();
+  canceled.runtime.memoryMap = () => ({ ok: true, map });
+  assert.equal((await canceled.handlers.get('export-memory')({}, '0x0290')).canceled, true);
+  assert.equal(canceled.calls.length, 1);
+});
+
+test('preload exposes only explicit memory scan/cache/export channels', () => {
+  let api;
+  const calls = [];
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../preload.js'), 'utf8'), { require: () => ({
+    contextBridge: { exposeInMainWorld: (_key, value) => { api = value; } },
+    ipcRenderer: { invoke: (...args) => { calls.push(args); } }, webUtils: {},
+  }) });
+  api.scanMemory(); api.memoryMap('0x0290'); api.exportMemory('0x0290');
+  assert.deepEqual(calls, [['scan-memory'], ['memory-map', '0x0290'], ['export-memory', '0x0290']]);
 });

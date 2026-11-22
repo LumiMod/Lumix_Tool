@@ -32,7 +32,7 @@ export default function App() {
       <Flex vertical className="sidebar-content">
         <Flex align="center" gap="small" className="brand"><CameraOutlined style={{ color: token.colorPrimary, fontSize: 26 }} /><div><Title level={4} style={{ margin: 0 }}>LumixTool</Title><Text type="secondary">LUMIX 相机工具箱</Text></div></Flex>
         <Menu mode="inline" selectedKeys={[page]} items={menuItems} onClick={({ key }) => setPage(key)} style={{ borderInlineEnd: 0 }} />
-        <div className="sidebar-footer"><Text type="secondary">本地运行 · 无需网络</Text><br /><Text type="secondary">v0.1.0</Text></div>
+        <div className="sidebar-footer"><Text type="secondary">本地运行 · 无需网络</Text><br /><Text type="secondary">v{__APP_VERSION__}</Text></div>
       </Flex>
     </Sider>
     <Layout style={{ minWidth: 0 }}>
@@ -58,7 +58,7 @@ export default function App() {
               description={<span className="break-text">{driverNeeded ? '打开连接指南，使用「一键安装驱动」，完成后重新检测。' : camera.error || camera.platformNote || '进入服务模式并连接 USB，即可写入音效。你可以先选择音频并试听。'}</span>}
               action={<Button onClick={() => setPage(!driverNeeded && missing ? 'settings' : 'connection')}>{driverNeeded ? '安装驱动' : missing ? '打开设置' : '连接指南'}</Button>} />}
           </>}
-          {tools.map(({ id, component: Tool }) => <section key={id} hidden={page !== id} data-tool-view={id}><Tool device={device} active={page === id} /></section>)}
+          {tools.map(({ id, component: Tool }) => <section key={id} hidden={page !== id} data-tool-view={id}><Tool device={device} active={page === id} navigate={setPage} /></section>)}
           <section hidden={page !== 'connection'}><ConnectionGuide device={device} navigate={setPage} active={page === 'connection'} /></section>
           <section hidden={page !== 'settings'}><Settings device={device} /></section>
         </div>
@@ -78,7 +78,7 @@ function MockToolbar({ device }) {
       onChange={scenario => device.configureMock({ scenario })} options={[
         { value: 'connected', label: '已连接' }, { value: 'disconnected', label: '未连接' },
         { value: 'error', label: '连接异常' }, { value: 'python-missing', label: 'Python 缺失' },
-        { value: 'region-not-free', label: '区域被占用（#20）' },
+        { value: 'region-not-free', label: '缓存过期（首个区域被占用）' },
       ]} /><label htmlFor="mockDriver">驱动状态</label><Select id="mockDriver" value={env.mockState.driverScenario} disabled={locked} style={{ width: 170 }}
       onChange={driverScenario => device.configureMock({ driverScenario })} options={[
         { value: 'ok', label: '驱动正常' }, { value: 'absent', label: '无服务模式设备' }, { value: 'normal', label: '普通模式 2382' },

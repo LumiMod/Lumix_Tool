@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Runtime } = require('../runtime');
 const stock = require('../mock-sound-table.json');
+const { mockMemoryMap } = require('../memory.mjs');
 
 function fixture(t, options = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lumixtool-test-'));
@@ -16,6 +17,7 @@ function fixture(t, options = {}) {
   return runtime;
 }
 function fastOperations(runtime) {
+  runtime.saveMemoryMap({ ...mockMemoryMap(), scannedAt: new Date().toISOString(), bodyVersion: '0x0208' });
   runtime.mockOperation = async (_kind, total) => {
     runtime.emitProgress({ done: Math.floor(total / 2), total });
     runtime.emitProgress({ done: total, total });
@@ -76,9 +78,9 @@ test('batch regions are independent, progress is overall and per-entry, restorat
   fastOperations(runtime);
   const result = await runtime.soundBatch('apply', { indices: [1, 0, 27], pcm: new ArrayBuffer(20), samples: 10 });
   assert.deepEqual(result, { ok: true, succeeded: [1, 0, 27] });
-  assert.equal(runtime.mockEntries[1].addr, '0x0F084110');
-  assert.equal(runtime.mockEntries[0].addr, '0x0F042110');
-  assert.equal(runtime.mockEntries[27].addr, '0x0F738110');
+  assert.equal(runtime.mockEntries[1].addr, '0x0F000010');
+  assert.equal(runtime.mockEntries[0].addr, '0x0F000410');
+  assert.equal(runtime.mockEntries[27].addr, '0x0F000810');
   assert.equal(runtime.mockEntries[1].size, 10);
   assert.ok(events.every(e => e.overallTotal === 30));
   assert.ok(events.every((e, i) => i === 0 || e.overallDone >= events[i - 1].overallDone));
@@ -91,21 +93,22 @@ test('batch regions are independent, progress is overall and per-entry, restorat
   assert.deepEqual(runtime.mockEntries, stock);
 });
 
-test('occupied region stops a batch and leaves failed/later entries untouched', async t => {
+test('stale map refuses the first allocation and leaves all entries untouched', async t => {
   const runtime = fixture(t);
   fastOperations(runtime);
   runtime.configureMock({ scenario: 'region-not-free' });
   const before = runtime.mockEntries.map(e => ({ ...e }));
   const result = await runtime.soundBatch('apply', { indices: [1, 20, 21], pcm: new ArrayBuffer(20), samples: 10 });
   assert.equal(result.ok, false);
-  assert.equal(result.error, 'region not free');
-  assert.equal(result.address, '0x8F56A100');
-  assert.deepEqual(result.succeeded, [1]);
-  assert.equal(result.failedIndex, 20);
-  assert.deepEqual(result.pending, [21]);
+  assert.equal(result.code, 'stale-map');
+  assert.match(result.error, /重新扫描内存/);
+  assert.equal(result.address, '0x8F000000');
+  assert.deepEqual(result.succeeded, []);
+  assert.equal(result.failedIndex, 1);
+  assert.deepEqual(result.pending, [20, 21]);
   assert.deepEqual(runtime.mockEntries[20], before[20]);
   assert.deepEqual(runtime.mockEntries[21], before[21]);
-  assert.notEqual(runtime.mockEntries[1].hex, before[1].hex);
+  assert.deepEqual(runtime.mockEntries, before);
   assert.equal(runtime.batchContext, null);
 });
 
@@ -139,13 +142,14 @@ test('invalid batches, changed versions and corrupt backups cause no writes', as
 
 test('live slot commands preserve arguments and clean PCM temporary files', async t => {
   const runtime = fixture(t, { mock: false, platform: 'win32' });
-  const payload = { index: 20, pcm: new Uint8Array([1, 0, 2, 0]), samples: 2 };
+  const payload = { index: 20, regionAddr: 0x8F000400, pcm: new Uint8Array([1, 0, 2, 0]), samples: 2 };
   let filename;
   runtime.run = async args => {
     if (args[0] === 'apply-slot') {
       assert.equal(args[1], '20');
       filename = args[2];
       assert.equal(args[3], '2');
+      assert.equal(args[4], '0x8F000400');
       assert.deepEqual(fs.readFileSync(filename), Buffer.from(payload.pcm));
     } else assert.deepEqual(args, ['restore-id', '20', stock[20].hex]);
     return { ok: true };

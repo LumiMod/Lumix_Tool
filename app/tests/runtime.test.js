@@ -70,7 +70,7 @@ test('mock defaults to a connected camera and exposes every connection scenario 
   assert.equal(runtime.mockState.scenario, 'python-missing');
 });
 
-test('mock apply and restore take ~3 seconds, emit progress and persist custom state; failure is one shot', async t => {
+test('first mock apply scans then writes, restore emits progress, and failure is one shot', async t => {
   const progress = [];
   const { options } = fixture(t, { mock: true, onProgress: event => progress.push(event) });
   const runtime = new Runtime(options);
@@ -78,10 +78,12 @@ test('mock apply and restore take ~3 seconds, emit progress and persist custom s
   const payload = { pcm: new ArrayBuffer(882), samples: 441 };
   const start = Date.now();
   assert.deepEqual(await runtime.apply(payload), { ok: true });
-  assert.ok(Date.now() - start >= 2900);
-  assert.equal(progress.length, 20);
-  assert.deepEqual(progress.at(-1), { done: 441, total: 441 });
-  assert.ok(progress.every((event, index) => event.total === 441 && (index === 0 || event.done >= progress[index - 1].done)));
+  assert.ok(Date.now() - start >= 5800);
+  assert.ok(progress.some(event => event.phase === 'scan'));
+  assert.equal(progress.at(-1).done, 441);
+  assert.equal(progress.at(-1).overallDone, 441);
+  const scan = progress.filter(event => event.phase === 'scan');
+  assert.equal(scan.at(-1).done, 8192);
   assert.equal((await runtime.status()).custom, true);
   progress.length = 0;
   assert.deepEqual(await runtime.restore(), { ok: true });
@@ -149,7 +151,8 @@ test('Python transport preserves existing arguments and parses fragmented progre
     module: { exports: {} }, process, Buffer, setTimeout, clearTimeout,
     require: name => name === 'node:child_process' ? { spawn }
       : name === './driver' ? require('../driver')
-      : name === './mock-sound-table.json' ? require('../mock-sound-table.json') : require(name),
+      : name === './mock-sound-table.json' ? require('../mock-sound-table.json')
+      : name === './memory.mjs' ? require('../memory.mjs') : require(name),
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../runtime.js'), 'utf8'), sandbox);
   const runtime = new sandbox.module.exports.Runtime({ ...options, onProgress: event => events.push({ ...event }) });

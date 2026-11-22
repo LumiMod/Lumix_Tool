@@ -1,6 +1,6 @@
 # LumixTool
 
-离线运行的 LUMIX 相机工具箱，使用 React 19 + Ant Design 6。默认浅色，实时跟随系统深色模式。当前工具是 **Panasonic DC-S5 音效替换**：管理全部 28 项音效，选择音频、试听、逐项或批量写入 RAM，再通过相机电源键热重启生效。
+离线运行的 LUMIX 相机工具箱，使用 React 19 + Ant Design 6。默认浅色，实时跟随系统深色模式。当前提供 **Panasonic DC-S5 音效替换** 与 **内存诊断（只读）**：管理全部 28 项音效，选择音频、试听、逐项或批量写入 RAM，再通过相机电源键热重启生效。
 
 仅修改 RAM，不写 flash。电源键重启后保留；拔电池或恢复出厂后失效。音频最多 3 秒，超出时取前 3 秒。完成后**用电源键关机再开机，不要拔电池**。
 
@@ -31,10 +31,10 @@ Windows 可双击 `start.bat`，若缺少 `renderer-dist\index.html` 会先运�
 3. 在应用中刷新连接，查看型号与机身版本。普通 PTP 模式 `04DA:2382` 无法使用该工具。
 4. 在音效表中点击某项「替换」，或勾选多个编号以写入同一段声音。#1 对焦提示音已确认；#20 参考资料称快门音但实测不符，其余映射待确认。可点名称旁的编辑按钮记录本机名称。选择或拖入音频（不超过 100 MB）。支持格式取决于 Electron / 系统解码器，解码失败会显示原因。
 5. 查看原文件真实时长、声道数与波形。试听的是转换为 **44.1 kHz / 单声道 / s16le** 后的实际写入片段；超过 3 秒会提示截取。Web Audio 解码后的采样率不是原文件采样率，因此不将它标作原文件采样率。
-6. 点击「写入所选音效」，等待逐项传输与校验成功。实机耗时约为采样数 × 0.002 秒 × 所选项数，3 秒音频每项约需 265 秒。预计超过 2 分钟会提示服务模式约 4–7 分钟空闲后可能自动关机，请轻点相机触摸屏保活。批量同时显示总进度与当前项进度，首项失败即停止，并报告成功、失败和未执行编号。
+6. 在「写入准备」核对预计地址、每项占用、总空闲与最大连续空闲。可先在「内存诊断」只读扫描；无缓存时首次写入会先扫描内存（模拟约 3 秒，实机预计约 20 秒，以实际进度为准）。点击「写入所选音效」，整批预分配成功后等待逐项传输与校验。实机耗时约为采样数 × 0.002 秒 × 所选项数，3 秒音频每项约需 265 秒。预计超过 2 分钟会提示服务模式约 4–7 分钟空闲后可能自动关机，请轻点相机触摸屏保活。批量同时显示总进度与当前项进度，首项失败即停止，并报告成功、失败和未执行编号。
 7. **用电源键关机再开机，不要拔电池**，触发相应动作试听（#1 为半按快门合焦）。恢复时点击该行「恢复」或「全部恢复」并确认，然后热重启。全部恢复仅包含有原始备份的条目。操作结果会自动滚入视野，并显示常驻通知和热重启提醒。
 
-写入 / 恢复期间，刷新、音频更换、Python 设置和其他相机操作禁用；可以切换页面，已选音频、进度与结果保留，试听在离开工具页时停止。真实恢复命令不输出项内分段进度，因此当前项显示等待状态直到校验完成，总进度按已完成条目更新；写入显示后端真实采样进度，100% 传输不代表校验成功。失败时显示后端原始错误或校验信息。
+扫描 / 写入 / 恢复期间，刷新、音频更换、Python 设置和其他相机操作禁用；可以切换页面，已选音频、进度与结果保留，试听在离开工具页时停止。真实恢复命令不输出项内分段进度，因此当前项显示等待状态直到校验完成，总进度按已完成条目更新；写入显示后端真实采样进度，100% 传输不代表校验成功。失败时显示后端原始错误或校验信息。
 
 驱动安装会创建或复用 `CN=LumixTool Driver Signing` 本机自签名证书，并加入 `LocalMachine\Root` 与 `LocalMachine\TrustedPublisher`，私钥保存在 `LocalMachine\My`（不可导出）。该信任影响整台电脑，INF 只匹配 `2370`，不会匹配普通模式 `2382`。卸载应用不清理驱动和证书；在连接指南「高级」中卸载，可选择同时移除证书。安装 / 卸载 / 检测与相机操作共用主进程锁，驱动操作本身无需 Python。
 
@@ -51,17 +51,34 @@ npm run dist:win   # 输出 release/LumixTool-<版本>-win-x64.zip
 - electron-builder 配置在 `package.json` 的 `build` 字段：`python/` 解包到 `app.asar.unpacked`（外部 Python 进程读不了 asar），`driver/` 留在 asar 内（`driver.js` 会先复制到临时目录再提权运行）。
 - 不做单文件便携 exe：electron-builder 的 portable 目标依赖 NSIS。默认的 NSIS 3.0.4.1 只有 Intel 版，Apple 芯片 Mac 需要 Rosetta；改用 NSIS 3.12（`toolsets.nsis: "1.2.1"`）打出的 exe 在 Windows 上以普通权限启动会报「Error writing temporary file」，只有管理员运行才能打开。所以改发 zip，解压后双击 `LumixTool.exe`。
 - React / antd 由 Vite 打进 `renderer-dist/`，所以都放在 devDependencies，不进安装包。
+- **运行位置**：Chromium 的界面进程以受限身份运行，只能读取 `Users` / `Everyone` 组可读的文件。如果 LumixTool 所在文件夹的权限只给了你自己的账户（例如某些数据盘上由安全软件设置的权限），进程会在 3–5 秒后无窗口退出；以管理员运行时会弹出「LumixTool 无法启动」并给出解决办法。把文件夹放到桌面或「文档」，或运行 `icacls "<文件夹>" /grant *S-1-5-32-545:(OI)(CI)RX /T` 即可。
 - `LumixTool.exe` 未做代码签名，首次运行 Windows SmartScreen 会提示，需点「更多信息 → 仍要运行」。
 
 管理员脚本不接收 renderer 提供的脚本路径或任意命令，只接收应用生成的结果路径及可选证书清理标记。外链 IPC 仅允许精确的 `https://zadig.akeo.ie/`，renderer 使用文字按钮调用，不直接导航。
 
 ## 原始备份与 RAM 区域
 
-成功连接后，应用自动 `dump` 全部声表。每个机身版本的原始 32 字节 hex 和本地名称保存在 userData 的 `sounds.json`；模拟模式使用独立的 `sounds-mock.json`，避免污染实机备份。原始表项只在采样虚拟地址小于 `0x0F000100` 且尚未保存该项时记录，已有备份不会被新值覆盖。若首次连接时某项已经替换而没有备份，会标记「无法单独恢复（拔电池可恢复）」并禁用该项恢复。原始时长来自保存的表项，没有备份时显示「—」。备份文件无法读取或保存时停止写入，请先检查文件。
+成功连接后，应用自动 `dump` 全部声表。每个机身版本的原始 32 字节 hex 和本地名称保存在 userData 的 `sounds.json`；模拟模式使用独立的 `sounds-mock.json`，避免污染实机备份。原始表项只在采样虚拟地址小于 `0x0F000000` 且尚未保存该项时记录，已有备份不会被新值覆盖。若首次连接时某项已经替换而没有备份，会标记「无法单独恢复（拔电池可恢复）」并禁用该项恢复。原始时长来自保存的表项，没有备份时显示「—」。备份文件无法读取或保存时停止写入，请先检查文件。
 
-每个索引 `i` 使用物理区域 `0x8F000100 + (i + 1) × 0x42000`，跳过旧版共用区域；16 字节 `LMXTSLOT` / u32 索引 / u32 采样数头之后存 PCM。写入前读取整个区域，只接受该索引的已有头或全区 `0x55`，否则返回 `region not free` 和地址，零写入。区域空闲总大小未知，安全检查失败时不会越过它继续写入。详见 [声表文档](../docs/SOUND_TABLE.md#41-lumixtool-每项独立-ram-区域新版)。
+固定步长地址方案已移除。DC-S5 **0x0290** 实测 `0x8F084100` 并非全 `0x55`，旧守卫正确阻止了覆盖。
+现在先扫描 `[0x8F000000, 0x8F800000)` 的 8 MiB 暂存区，按 1 KiB 分类为 `free-0x55` / `zero` / `lumixtool` / `data`，结果按机身版本缓存于 `memory-maps.json`（模拟为 `memory-maps-mock.json`）。缓存包含 `{ scannedAt, bodyVersion, start, length, runs }`，每次成功写入会在本地标记相应块，但保留扫描时间。
 
-后端兼容 `status`、`dump`、`apply`、`apply-id`、`restore`、`restore-id`，并新增 `apply-slot <index> <pcm> <samples>`；所有 apply 命令均采用独立区域方案，输出 `PROGRESS <done> <total>`，最后输出一行 JSON。UI 的批量操作在主进程持有整个批次的互斥锁，依次调用 `apply-slot` / `restore-id`。
+声表中的暂存区指针是当前占用的唯一依据：每项占用从 PCM 物理地址前 16 字节开始，到 PCM 末尾向上取整至 1 KiB。分配器优先复用容量足够的本项区域，否则在扫描得到的 `free-0x55` 区段中 first-fit，排除其他项的当前占用及本批次已分配空间。整批在首个写操作前完成分配，空间不足会报告需新分配空间、总空闲和最大连续空闲，并且整批零写入。恢复或搬迁后的旧 PCM 不自动回收。
+
+写入地址必须按 1 KiB 对齐，且完整范围不超过暂存区。16 字节 `LMXTSLOT` / u32 索引 / u32 采样数头之后存 PCM。后端在任何写操作前检查精确的 `16 + samples × 2` 字节：必须全 `0x55`，或以同索引有效头开头且超出旧 PCM 范围的新字节全 `0x55`。否则返回 `region not free` 与物理地址，本项零写入；应用将被拒绝分配块标为 `data`，显示重新扫描按钮，停止批次且不自动重试。详见 [声表文档](../docs/SOUND_TABLE.md#41-lumixtool-扫描与分配-ram-区域)。
+
+「内存诊断」是独立只读工具，显示扫描进度、扫描时间、机身版本、空间统计、带提示的地图、扫描区段和声表当前占用（例如 `#1 → 0x8F000000 (87 KiB)`）。地图叠加当前声表占用；区段表和 JSON 为扫描缓存及本地写入标记。点击「导出 JSON」通过主进程保存对话框导出本机缓存，扫描本身只发送读取命令。
+
+后端命令：
+
+```sh
+python python/s5focus.py scan [start] [length]  # 只读，默认 8 MiB
+python python/s5focus.py apply-slot <index> <pcm> <samples> <region_addr>
+python python/s5focus.py apply-id <id> <pcm> <samples> <region_addr>
+python python/s5focus.py apply <pcm> <samples> <region_addr>  # #1 兼容命令
+```
+
+所有 apply 命令都要求显式物理地址，不再推导默认地址；`status`、`dump`、`restore`、`restore-id` 保留。进度为 `PROGRESS <done> <total>`，最后一行 JSON。主进程互斥锁覆盖首次扫描、整批分配、逐项 `apply-slot` / `restore-id` 和本地缓存更新；preload 仅公开 `scan-memory`、`memory-map`、`export-memory` 等明确 IPC。
 
 ## 模拟模式
 
@@ -84,7 +101,9 @@ set LUMIXTOOL_MOCK=1
 start.bat
 ```
 
-默认返回 `DC-S5`、机身版本 `0x0208`。顶部工具栏可切换「已连接 / 未连接 / 连接异常 / Python 缺失 / 区域被占用（#20）」，并勾选「下次操作失败」。28 项模拟表的采样长度来自 `docs/SOUND_TABLE.md` §2；各项状态在当前进程内保留，重启模拟进程后回到原厂表。写入和恢复每项约 3 秒，通过 IPC 发送进度；失败选项在 60% 时返回模拟 USB 超时，仅生效一次。「区域被占用（#20）」在写 #20 时立即返回 `region not free` 及地址；选择 #1、#20、#21 可检查批量在 #20 停止且报告 #1 成功。恢复不受区域占用影响。
+默认返回 `DC-S5`、机身版本 `0x0208`。顶部工具栏可切换「已连接 / 未连接 / 连接异常 / Python 缺失 / 缓存过期（首个区域被占用）」，并勾选「下次相机操作失败」。28 项模拟表的采样长度来自 `docs/SOUND_TABLE.md` §2；各项状态在当前进程内保留，重启后回到原厂表。写入、恢复每项约 3 秒；首次无缓存时另有约 3 秒扫描。「下次相机操作失败」在写入或恢复的 60% 时模拟一次 USB 超时。
+
+模拟 RAM 是碎片化 8 MiB：`0x8F000000–0x8F080000` 空闲、`0x8F080000–0x8F0A0000` 数据（包含实机出问题的 `0x8F084100`）、`0x8F0A0000–0x8F0B0000` 全零、`0x8F0B0000–0x8F400000` 空闲、之后为数据。扫描只读模拟内存并发进度；写入遵循与后端相同的守卫。选择缓存过期场景后，首个分配区域会在守卫前变为数据，导致当前项及后续项均未写入。重新扫描可观察该块，重新选择此场景会再次触发一次过期。恢复不受该场景影响。
 
 驱动模拟独立于平台，可在 macOS/Linux 走查 Windows 界面。`#mockDriver` 提供正常、无设备、普通模式 2382、未安装、libusbK、GUID 缺失、GUID 未知；`#mockDriverResult` 选择安装 / 卸载成功、失败或取消 UAC。成功安装会将已连接服务设备改为正常，卸载后改为未安装；无设备或普通模式下只模拟添加包，不伪造绑定。设备状态选「未连接」时优先显示无设备，需切回「已连接」检查驱动场景。驱动结果选项持续生效，可反复测试，不使用「下次相机操作失败」。模拟操作绝不调用 Windows 命令或修改证书。
 
@@ -92,11 +111,11 @@ start.bat
 
 建议走查：未连接 → 连接指南 → 已连接 → 拖入超过 3 秒的音频 → 波形与试听 → 写入进度与成功 → 恢复确认 / 取消 → 勾选失败后写入 → 连接异常 → Python 缺失 → 设置。也应切换系统浅色 / 深色，确认实时更新。
 
-自动化稳定入口：`#mockScenario`（Ant Design Select）、`#mockFail`、`#refreshDevice`、`#applyAudio`、`#restoreAll`、`#audioDrop`、`[data-tool="focus-sound"]`（保留原导航 key）、`#navConnection`、`#navSettings`。音效表每行有 `data-slot="<index>"`，行内有选择 checkbox、`[data-action="replace"]`、`[data-action="restore"]` 与 `[data-action="rename"]`；表格不分页、不虚拟化，28 行均在 DOM 中。Select 应点击后选择标签，Modal 确认按钮位于 body 的 portal 中，例如 Playwright：
+自动化稳定入口：`#mockScenario`（Ant Design Select）、`#mockFail`、`#refreshDevice`、`#applyAudio`、`#restoreAll`、`#audioDrop`、`[data-tool="focus-sound"]`（保留原导航 key）、`[data-tool="memory"]`、`#scanMemory`、`#memoryMap`、`#memoryRuns`、`#exportMemory`、`#navConnection`、`#navSettings`。音效表每行有 `data-slot="<index>"`，行内有选择 checkbox、`[data-action="replace"]`、`[data-action="restore"]` 与 `[data-action="rename"]`；表格不分页、不虚拟化，28 行均在 DOM 中。Select 应点击后选择标签，Modal 确认按钮位于 body 的 portal 中，例如 Playwright：
 
 ```js
 await page.locator('#mockScenario').click();
-await page.locator('.ant-select-item-option').filter({ hasText: '区域被占用（#20）' }).click();
+await page.locator('.ant-select-item-option').filter({ hasText: '缓存过期（首个区域被占用）' }).click();
 await page.locator('[data-slot="20"] [data-action="replace"]').click();
 // 批量选择使用行内 checkbox；默认已选 #1，先取消再选择目标项。
 await page.locator('[data-slot="1"] input[type="checkbox"]').uncheck();
@@ -149,12 +168,14 @@ if (!result.ok) throw new Error(result.error || '后端校验失败');
 - `src/tools/index.jsx`：工具注册表。
 - `src/tools/sounds/`：28 项表格、名称目录 `catalog.js`、状态、逐项 / 批量写入与恢复。
 - `src/tools/focus-sound/`：复用的音频转换与波形组件。
+- `src/tools/memory/`：只读内存诊断、地图、统计、区段表与 JSON 导出。
+- `memory.mjs`：主进程与 renderer 共享的纯分配器、声表占用解析和缓存区段处理（打包时包含）。
 - `vite.config.mjs` / `index.html`：本地构建与 CSP；产物 `renderer-dist/` 不提交。
 - `scripts/dev.mjs`：开发服务器与 Electron 生命周期。
 - `main.js` / `preload.js`：窗口、原生对话框与隔离 IPC。
 - `runtime.js`：Python 检测、配置迁移、输出解析与 mock 后端。
 - `driver.js` / `driver/`：Windows 驱动状态解析、受控提权、INF 模板与安装 / 回滚脚本。
-- `python/s5focus.py`：声表与独立 RAM 区域；`python/s5svc.py`：原有协议实现，未修改。
+- `python/s5focus.py`：声表、只读扫描与显式地址写入守卫；`python/s5svc.py`：原有协议实现，未修改。
 - `mock-sound-table.json`：模拟用 28 项原厂表（长度和地址取自声表文档，辅助字段为模拟值，不用于实机恢复）。
 
 ```sh
@@ -178,3 +199,7 @@ python3 -m unittest discover -s python/tests -v
 4. 用真实相机完成「连接并验证」，再执行 `python python/s5focus.py status`。分别验证整体设备与 `MI_00` 复合枚举；`s5svc.py` 仍按非复合枚举根键构造路径，复合接口即使驱动正常也可能需要后续后端适配，本次不修改该文件。
 5. 安装 / 卸载期间尝试相机读写、刷新、模拟切换和退出，确认互斥与提示。重新插拔 USB，确认状态自动更新。
 6. 「高级」卸载，核对只删除本项目的 `oemNN.inf`；重复卸载；再安装后勾选证书清理卸载，核对三个证书存储。普通开机重插相机，确认 `2382` 的 MTP 与照片导入正常。
+
+新增内存测试覆盖同项复用、绕过数据和当前占用的 first-fit、整批空间不足时零写入、守卫拒绝后的缓存失效处理、禁止静默重试、按机身版本隔离缓存、约 3 秒只读模拟扫描、扫描阶段进度、实际 React 诊断页与 IPC 锁 / 导出对话框。Python 假设备测试验证精确字节范围、同索引缩短 / 重写 / 向 0x55 扩展、不同索引和数据拒绝、对齐 / 越界在连接前拒绝，以及扫描零写入。
+
+实机还需验证：Windows + DC-S5 0x0290 的完整 8 MiB 扫描与耗时、碎片区 first-fit 地址、单项及批量写入后的热重启音效、缩短 / 增长重写、拔电池后的过期缓存拒绝及重新扫描；确认扫描过程中没有写命令，守卫拒绝时头、PCM 和声表均未修改。

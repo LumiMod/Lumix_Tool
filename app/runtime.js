@@ -8,6 +8,10 @@ const mockTable = require('./mock-sound-table.json');
 const { START, END, BLOCK, validMap, liveRegions, planAllocation, markRange, mockMemoryMap, hexAddress } = require('./memory.mjs');
 const SCRATCH_VIRTUAL = START - 0x80000000;
 const isScratch = addr => Number(addr) >= SCRATCH_VIRTUAL && Number(addr) < END - 0x80000000;
+// Stock sound-table entries point into the firmware program image (virtual
+// 0x06280000..0x07280000 on 2.90). Anything else was patched, including entries
+// written to the 0x8B5B0000 scratch briefly used in commit e59b596.
+const isStockAddress = addr => Number(addr) >= 0x06280000 && Number(addr) < 0x07280000;
 const validIndex = index => Number.isInteger(index) && index >= 0 && index < 28;
 const validHex = hex => typeof hex === 'string' && /^[0-9a-f]{64}$/i.test(hex);
 
@@ -116,7 +120,7 @@ class Runtime {
     saved.labels ||= {};
     for (const entry of table.entries) {
       const raw = Buffer.from(entry.hex, 'hex');
-      if (raw.readUInt32LE(4) < SCRATCH_VIRTUAL && !Object.hasOwn(saved.originals, entry.index)) {
+      if (isStockAddress(raw.readUInt32LE(4)) && !Object.hasOwn(saved.originals, entry.index)) {
         saved.originals[entry.index] = entry.hex;
       }
     }
@@ -342,13 +346,19 @@ class Runtime {
       if (this.mockState.scenario === 'unverified') return { ok: false, error: 'unsupported firmware: body version 0x0280 has not been verified (verified: 0x0290); writing is disabled' };
       if (this.mockState.staleNext) {
         this.mockState.staleNext = false;
-        this.mockRam[addr - START] = 0xA7;
+        // Simulate another entry having claimed this span since the last scan.
+        const other = (payload.index + 1) % 28;
+        this.mockRam.write('LMXTSLOT', addr - START);
+        this.mockRam.writeUInt32LE(other, addr - START + 8);
+        this.mockRam.writeUInt32LE(1, addr - START + 12);
       }
       const span = this.mockRam.subarray(addr - START, addr - START + 16 + pcm.length);
-      const oldSamples = span.readUInt32LE(12);
-      const owned = span.subarray(0, 8).toString() === 'LMXTSLOT' && span.readUInt32LE(8) === payload.index &&
-        oldSamples > 0 && oldSamples <= 132300 && addr + 16 + oldSamples * 2 <= END;
-      if (!span.every(byte => byte === 0x55) && !(owned && span.subarray(16 + oldSamples * 2).every(byte => byte === 0x55))) {
+      // Same rule as s5focus.region_is_free: the 0x8F scratch keeps stale bytes
+      // across warm reboots, so only a valid header of another entry blocks a write.
+      const headerIndex = span.readUInt32LE(8), headerSamples = span.readUInt32LE(12);
+      const foreignHeader = span.subarray(0, 8).toString() === 'LMXTSLOT' && headerIndex < 28 &&
+        headerSamples > 0 && headerSamples <= 132300 && headerIndex !== payload.index;
+      if (foreignHeader) {
         return { ok: false, error: 'region not free', address: hexAddress(addr), index: payload.index };
       }
       const result = await this.mockOperation('apply', payload.samples);
@@ -375,7 +385,7 @@ class Runtime {
   }
 
   async restoreId(index, hex) {
-    if (!validIndex(index) || !validHex(hex) || Buffer.from(hex, 'hex').readUInt32LE(4) >= SCRATCH_VIRTUAL) {
+    if (!validIndex(index) || !validHex(hex) || !isStockAddress(Buffer.from(hex, 'hex').readUInt32LE(4))) {
       return { ok: false, error: '没有可用的原始表项，无法单独恢复（拔电池可恢复）。' };
     }
     if (this.mock) {
@@ -431,7 +441,9 @@ class Runtime {
         } catch (error) { result = { ok: false, error: error.message || String(error) }; }
         if (kind === 'apply' && (result.ok || result.error === 'region not free')) {
           const allocation = plan.allocations[position];
-          map = markRange(map, allocation.start, allocation.end, result.ok ? 'lumixtool' : 'data');
+          // A refusal means another entry's header sits there; either way the span is LumixTool-owned now.
+          // ('data' would not help: since 730faad stale data is allocatable, so the next plan would pick it again.)
+          map = markRange(map, allocation.start, allocation.end, 'lumixtool');
           if (!result.ok) result = { ...result, code: 'stale-map', rescan: true,
             error: `目标区域 ${result.address || allocation.address} 已被占用，内存扫描缓存可能已过期；本项未写入，请重新扫描内存后再试。` };
           // Record a successful device write even if saving the local cache fails.

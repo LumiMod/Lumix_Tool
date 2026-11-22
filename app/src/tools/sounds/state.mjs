@@ -1,10 +1,10 @@
 import { START, END } from '../../../memory.mjs';
 
-// Current scratch RAM (virtual addresses) plus the 0x8F000000 range that
-// v0.2.0/v0.3.0 wrote to: entries patched by those builds stay replaced until
-// the battery is pulled.
+// Current scratch RAM (virtual addresses) plus the 0x8B5B0000 range that was
+// briefly used (commit e59b596): entries patched there stay replaced until the
+// battery is pulled.
 export const SCRATCH_VIRTUAL = START - 0x80000000;
-const SCRATCH_RANGES = [[SCRATCH_VIRTUAL, END - 0x80000000], [0x0F000000, 0x0F800000]];
+const SCRATCH_RANGES = [[SCRATCH_VIRTUAL, END - 0x80000000], [0x0B5B0000, 0x0BAD0000]];
 const inScratch = addr => SCRATCH_RANGES.some(([start, end]) => addr >= start && addr < end);
 
 export function originalSamples(hex) {

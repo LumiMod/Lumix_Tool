@@ -89,19 +89,19 @@ class SlotTests(unittest.TestCase):
                 focus.encode_header(7, samples)
 
     def test_alignment_range_and_span_validate_before_opening_device(self):
-        for addr in [0x8B5AFC00, 0x8BAD0000, 0x8B634100, 0x8B5B0001, True, 1.5]:
+        for addr in [0x8EFFFC00, 0x8F800000, 0x8F084100, 0x8F000001, True, 1.5]:
             with self.subTest(addr=addr), patch.object(self.transport, 'Service') as service:
                 with self.assertRaises(ValueError):
                     focus.cmd_apply(self.pcm, 2, 1, addr)
                 service.assert_not_called()
         with self.assertRaises(ValueError):
-            focus.validate_region(0x8BACFC00, 512)
-        self.assertEqual(focus.validate_region(0x8BACFC00, 504), 0x8BACFC00)
+            focus.validate_region(0x8F7FFC00, 512)
+        self.assertEqual(focus.validate_region(0x8F7FFC00, 504), 0x8F7FFC00)
         self.assertEqual(self.svc.reads, [])
         self.assertEqual(self.svc.writes, [])
 
     def test_exact_span_all_55_is_accepted_and_data_just_beyond_ignored(self):
-        addr = 0x8B5B0000
+        addr = 0x8F000000
         self.svc.put(addr + 20, b'\x00')
         with contextlib.redirect_stdout(io.StringIO()):
             focus.cmd_apply(self.pcm, 2, 1, addr)
@@ -109,45 +109,49 @@ class SlotTests(unittest.TestCase):
         self.assertEqual(self.svc.get(addr + 16, 4), b'\x01\x00\xff\x7f')
         self.assertEqual(self.svc.get(addr + 20, 1), b'\x00')
 
-    def test_data_at_last_byte_refuses_before_any_write(self):
-        addr = 0x8B5B0000
-        self.svc.put(addr + 19, b'\x00')
+    def test_stale_bytes_are_overwritten(self):
+        addr = 0x8F000000
+        self.svc.put(addr, b'stale data from an earlier boot')
+        with contextlib.redirect_stdout(io.StringIO()):
+            focus.cmd_apply(self.pcm, 2, 20, addr)
+        self.assertEqual(self.svc.get(addr, 16), focus.encode_header(20, 2))
+        self.assertEqual(self.svc.get(addr + 16, 4), b'\x01\x00\xff\x7f')
+
+    def test_other_entry_header_refuses_before_any_write(self):
+        addr = 0x8F000000
+        self.svc.put(addr, focus.encode_header(5, 2))
         with self.assertRaises(focus.RegionNotFree) as raised:
             focus.cmd_apply(self.pcm, 2, 20, addr)
         self.assertEqual(str(raised.exception), 'region not free')
-        self.assertEqual(raised.exception.address, '0x8B5B0000')
+        self.assertEqual(raised.exception.address, '0x8F000000')
         self.assertEqual(self.svc.writes, [])
         self.assertTrue(self.svc.closed)
         # Firmware/table checks read first; the guard read of the span comes last.
         self.assertEqual(self.svc.reads[-1], addr)
 
-    def test_guard_same_owner_fits_shrinks_grows_only_into_55(self):
-        addr = 0x8B5B1000
+    def test_same_owner_may_shrink_rewrite_or_grow(self):
+        addr = 0x8F001000
         for old_samples in [1, 2, 10]:
             self.svc.put(addr, focus.encode_header(3, old_samples))
-            self.svc.put(addr + 16, bytes(old_samples * 2))
-            if old_samples == 1:
-                self.svc.put(addr + 18, b'\x55\x55')
+            self.svc.put(addr + 16, b'\xAA' * 40)
             with contextlib.redirect_stdout(io.StringIO()):
                 focus.write_pcm(self.svc, self.pcm, 2, 3, addr)
-        self.svc.writes.clear()
-        self.svc.put(addr, focus.encode_header(3, 1))
-        self.svc.put(addr + 19, b'\x00')
+            self.assertEqual(self.svc.get(addr, 16), focus.encode_header(3, 2))
+
+    def test_other_index_header_refused_and_invalid_header_is_stale_data(self):
+        addr = 0x8F001000
+        self.svc.put(addr, focus.encode_header(2, 2))
         with self.assertRaises(focus.RegionNotFree):
             focus.write_pcm(self.svc, self.pcm, 2, 3, addr)
         self.assertEqual(self.svc.writes, [])
-
-    def test_other_index_and_invalid_header_refused(self):
-        addr = 0x8B5B1000
-        for raw in [focus.encode_header(2, 2), b'LMXTSLOT' + struct.pack('<II', 3, 0),
-                    b'LMXTSLOT' + struct.pack('<II', 3, 132301)]:
+        for raw in [b'LMXTSLOT' + struct.pack('<II', 3, 0), b'LMXTSLOT' + struct.pack('<II', 3, 132301)]:
             self.svc.put(addr, raw)
-            with self.assertRaises(focus.RegionNotFree):
+            with contextlib.redirect_stdout(io.StringIO()):
                 focus.write_pcm(self.svc, self.pcm, 2, 3, addr)
-        self.assertEqual(self.svc.writes, [])
+            self.assertEqual(self.svc.get(addr, 16), focus.encode_header(3, 2))
 
     def test_two_uploads_only_retarget_two_fields(self):
-        for index, addr in [(1, 0x8B5B0000), (4, 0x8B5B0400)]:
+        for index, addr in [(1, 0x8F000000), (4, 0x8F000400)]:
             original = struct.pack('<8I', index, 0x06AA3180, 3, 4, 5, 14464, 7, 8)
             self.svc.put(focus.entry_addr(index), original)
             with contextlib.redirect_stdout(io.StringIO()) as output:
@@ -157,20 +161,20 @@ class SlotTests(unittest.TestCase):
             self.assertTrue(json.loads(lines[-1])['ok'])
             expected = bytearray(original)
             struct.pack_into('<I', expected, 4, addr + 16 - 0x80000000)
-            struct.pack_into('<I', expected, 0x14, 2)
+            struct.pack_into('<I', expected, 0x14, 4)  # +0x14 is PCM bytes: 2 samples
             self.assertEqual(self.svc.get(focus.entry_addr(index), 32), expected)
 
     def test_read_failure_and_invalid_pcm_never_write(self):
         with self.assertRaises(RuntimeError):
-            focus.write_pcm(self.svc, self.pcm, 3, 2, 0x8B5B0000)
+            focus.write_pcm(self.svc, self.pcm, 3, 2, 0x8F000000)
         self.svc.exchange = lambda addr: b'bad frame'
         with self.assertRaises(RuntimeError):
-            focus.write_pcm(self.svc, self.pcm, 2, 2, 0x8B5B0000)
+            focus.write_pcm(self.svc, self.pcm, 2, 2, 0x8F000000)
         self.assertEqual(self.svc.writes, [])
 
     def test_restore_id_round_trips_saved_entry(self):
         raw = stock_entry(27, 0x06BB8500, 22400)
-        self.svc.put(focus.entry_addr(27), stock_entry(27, 0x0B5B0010, 2))
+        self.svc.put(focus.entry_addr(27), stock_entry(27, 0x0F000010, 2))
         with contextlib.redirect_stdout(io.StringIO()) as output:
             focus.cmd_restore_id(27, raw.hex())
         self.assertTrue(json.loads(output.getvalue())['ok'])
@@ -185,11 +189,11 @@ class SlotTests(unittest.TestCase):
         return output.getvalue().splitlines()
 
     def test_cli_region_error_is_one_json_line_and_no_writes(self):
-        self.svc.put(0x8B5B0013, b'\x00')
-        lines = self.cli(['apply-slot', '20', self.pcm, '2', '0x8B5B0000'])
+        self.svc.put(0x8F000000, focus.encode_header(5, 2))  # owned by another entry
+        lines = self.cli(['apply-slot', '20', self.pcm, '2', '0x8F000000'])
         self.assertEqual(len(lines), 1)
         self.assertEqual(json.loads(lines[0]), {
-            'ok': False, 'error': 'region not free', 'address': '0x8B5B0000',
+            'ok': False, 'error': 'region not free', 'address': '0x8F000000',
         })
         self.assertEqual(self.svc.writes, [])
 
@@ -200,17 +204,17 @@ class SlotTests(unittest.TestCase):
             self.assertEqual(len(lines), 1)
             self.assertFalse(json.loads(lines[0])['ok'])
             self.assertEqual(self.svc.writes, [])
-        for command, index, addr in [('apply', 1, '0x8B5B0000'), ('apply-id', 4, '0x8B5B0400')]:
+        for command, index, addr in [('apply', 1, '0x8F000000'), ('apply-id', 4, '0x8F000400')]:
             arguments = [command] + ([] if command == 'apply' else [str(index)]) + [self.pcm, '2', addr]
             self.assertTrue(json.loads(self.cli(arguments)[-1])['ok'])
             self.assertEqual(self.svc.get(int(addr, 0), 16), focus.encode_header(index, 2))
 
     def test_scan_is_read_only_and_merges_runs(self):
-        self.svc.put(0x8B5B0400, bytes(1024))
-        self.svc.put(0x8B5B0800, focus.encode_header(1, 2))
-        self.svc.put(0x8B5B0C00, b'X')
+        self.svc.put(0x8F000400, bytes(1024))
+        self.svc.put(0x8F000800, focus.encode_header(1, 2))
+        self.svc.put(0x8F000C00, b'X')
         with contextlib.redirect_stdout(io.StringIO()) as output:
-            focus.cmd_scan(0x8B5B0000, 5 * 1024)
+            focus.cmd_scan(0x8F000000, 5 * 1024)
         result = json.loads(output.getvalue().splitlines()[-1])
         self.assertEqual([r['kind'] for r in result['runs']],
                          ['free-0x55', 'zero', 'lumixtool', 'data', 'free-0x55'])
@@ -233,25 +237,25 @@ class FirmwareGateTest(unittest.TestCase):
 
     def test_unverified_body_version_blocks_every_write(self):
         self.svc.put(focus.VERSION_ADDR, struct.pack('<H', 0x0280))
-        self.assert_refused(['apply-slot', '1', self.pcm, '2', '0x8B5B0000'], 'body version 0x0280')
+        self.assert_refused(['apply-slot', '1', self.pcm, '2', '0x8F000000'], 'body version 0x0280')
         self.assert_refused(['restore'], 'body version 0x0280')
         self.assert_refused(['restore-id', '1', stock_entry(1).hex()], 'body version 0x0280')
 
     def test_unexpected_sound_table_blocks_writes(self):
         self.svc.put(focus.TBL + 5 * 32, stock_entry(9))
-        self.assert_refused(['apply-slot', '1', self.pcm, '2', '0x8B5B0000'], 'entry 5 has id 9')
+        self.assert_refused(['apply-slot', '1', self.pcm, '2', '0x8F000000'], 'entry 5 has id 9')
         self.svc.put(focus.TBL + 5 * 32, stock_entry(5, addr=0x12345678))
-        self.assert_refused(['apply-slot', '1', self.pcm, '2', '0x8B5B0000'], 'unexpected address 0x12345678')
+        self.assert_refused(['apply-slot', '1', self.pcm, '2', '0x8F000000'], 'unexpected address 0x12345678')
 
     def test_table_patched_by_older_builds_is_still_accepted(self):
-        self.svc.put(focus.TBL + 32, stock_entry(1, addr=0x0F000110, samples=2))
+        self.svc.put(focus.TBL + 32, stock_entry(1, addr=0x0B5B0110, samples=4))
         self.assertIsNone(focus.table_problem(self.svc.get(focus.TBL, 28 * 32)))
 
     def test_restore_id_only_accepts_stock_entries_for_that_index(self):
         with self.assertRaises(ValueError):
             focus.cmd_restore_id(1, stock_entry(2).hex())
         with self.assertRaises(ValueError):
-            focus.cmd_restore_id(1, stock_entry(1, addr=0x0B5B0010).hex())
+            focus.cmd_restore_id(1, stock_entry(1, addr=0x0F000010).hex())
         self.assertEqual(self.svc.writes, [])
 
     def test_status_reports_whether_writing_is_allowed(self):

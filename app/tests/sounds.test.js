@@ -24,7 +24,7 @@ function fastOperations(runtime) {
     return { ok: true };
   };
 }
-function patchEntry(runtime, index, address = 0x0B5B0100) {
+function patchEntry(runtime, index, address = 0x0F000100) {
   const entry = runtime.mockEntries[index];
   const raw = Buffer.from(entry.hex, 'hex');
   raw.writeUInt32LE(address, 4);
@@ -61,11 +61,13 @@ test('connect backs up 28 entries by body version; originals and labels survive 
 test('patched legacy/new addresses without originals are neither saved nor individually restored', async t => {
   const runtime = fixture(t);
   patchEntry(runtime, 1);
-  patchEntry(runtime, 27, 0x0BCE8110);
+  patchEntry(runtime, 27, 0x0F738110);
+  patchEntry(runtime, 26, 0x0B5B0110); // scratch briefly used in commit e59b596
   const table = (await runtime.inspect()).soundTable;
   assert.equal(table.originals[1], undefined);
   assert.equal(table.originals[27], undefined);
-  assert.equal(Object.keys(table.originals).length, 26);
+  assert.equal(table.originals[26], undefined);
+  assert.equal(Object.keys(table.originals).length, 25);
   let called = false;
   runtime.restoreId = async () => { called = true; };
   assert.equal((await runtime.soundBatch('restore', { indices: [1] })).ok, false);
@@ -78,10 +80,10 @@ test('batch regions are independent, progress is overall and per-entry, restorat
   fastOperations(runtime);
   const result = await runtime.soundBatch('apply', { indices: [1, 0, 27], pcm: new ArrayBuffer(20), samples: 10 });
   assert.deepEqual(result, { ok: true, succeeded: [1, 0, 27] });
-  assert.equal(runtime.mockEntries[1].addr, '0x0B5B0010');
-  assert.equal(runtime.mockEntries[0].addr, '0x0B5B0410');
-  assert.equal(runtime.mockEntries[27].addr, '0x0B5B0810');
-  assert.equal(runtime.mockEntries[1].size, 10);
+  assert.equal(runtime.mockEntries[1].addr, '0x0F000010');
+  assert.equal(runtime.mockEntries[0].addr, '0x0F000410');
+  assert.equal(runtime.mockEntries[27].addr, '0x0F000810');
+  assert.equal(runtime.mockEntries[1].size, 20); // table length is PCM bytes
   assert.ok(events.every(e => e.overallTotal === 30));
   assert.ok(events.every((e, i) => i === 0 || e.overallDone >= events[i - 1].overallDone));
   assert.deepEqual(events.map(e => e.index).filter((e, i, arr) => i === 0 || e !== arr[i - 1]), [1, 0, 27]);
@@ -102,7 +104,7 @@ test('stale map refuses the first allocation and leaves all entries untouched', 
   assert.equal(result.ok, false);
   assert.equal(result.code, 'stale-map');
   assert.match(result.error, /重新扫描内存/);
-  assert.equal(result.address, '0x8B5B0000');
+  assert.equal(result.address, '0x8F000000');
   assert.deepEqual(result.succeeded, []);
   assert.equal(result.failedIndex, 1);
   assert.deepEqual(result.pending, [20, 21]);
@@ -142,14 +144,14 @@ test('invalid batches, changed versions and corrupt backups cause no writes', as
 
 test('live slot commands preserve arguments and clean PCM temporary files', async t => {
   const runtime = fixture(t, { mock: false, platform: 'win32' });
-  const payload = { index: 20, regionAddr: 0x8B5B0400, pcm: new Uint8Array([1, 0, 2, 0]), samples: 2 };
+  const payload = { index: 20, regionAddr: 0x8F000400, pcm: new Uint8Array([1, 0, 2, 0]), samples: 2 };
   let filename;
   runtime.run = async args => {
     if (args[0] === 'apply-slot') {
       assert.equal(args[1], '20');
       filename = args[2];
       assert.equal(args[3], '2');
-      assert.equal(args[4], '0x8B5B0400');
+      assert.equal(args[4], '0x8F000400');
       assert.deepEqual(fs.readFileSync(filename), Buffer.from(payload.pcm));
     } else assert.deepEqual(args, ['restore-id', '20', stock[20].hex]);
     return { ok: true };
@@ -161,12 +163,12 @@ test('live slot commands preserve arguments and clean PCM temporary files', asyn
 
 test('renderer state uses saved duration and recognizes both scratch layouts', async () => {
   const { slotState, originalSamples } = await import('../src/tools/sounds/state.mjs');
-  assert.equal(originalSamples(stock[1].hex), 14464);
+  assert.equal(originalSamples(stock[1].hex), 7232); // +0x14 = 14464 bytes
   assert.equal(originalSamples(undefined), null);
   assert.equal(slotState(stock[1], stock[1].hex), '原厂');
-  assert.equal(slotState({ ...stock[1], addr: '0x0B5B0100' }, undefined), '已替换');
-  assert.equal(slotState({ ...stock[1], addr: '0x0B634110' }, stock[1].hex), '已替换');
-  assert.equal(slotState({ ...stock[1], addr: '0x0F000100' }, stock[1].hex), '已替换'); // written by v0.2.0/v0.3.0
+  assert.equal(slotState({ ...stock[1], addr: '0x0F000100' }, undefined), '已替换');
+  assert.equal(slotState({ ...stock[1], addr: '0x0F084110' }, stock[1].hex), '已替换');
+  assert.equal(slotState({ ...stock[1], addr: '0x0B5B0100' }, stock[1].hex), '已替换'); // written while scratch was 0x8B5B0000
   assert.equal(slotState(stock[1], stock[2].hex), '未知');
   assert.equal(slotState({}, undefined), '未知');
 });

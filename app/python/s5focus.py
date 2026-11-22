@@ -123,7 +123,7 @@ def guard_region(svc, idx, samples, addr):
 VERSION_ADDR = 0x863B0000
 VERIFIED_BODY_VERSIONS = {0x0290}
 PROGRAM_VIRT = (0x06280000, 0x07280000)   # program image, 16 MiB at 0x86280000
-LEGACY_SCRATCH_VIRT = (0x0F000000, 0x0F800000)  # written by LumixTool 0.2.0/0.3.0
+LEGACY_SCRATCH_VIRT = (0x0B5B0000, 0x0BAD0000)  # scratch briefly used in commit e59b596
 MAX_TABLE_SAMPLES = 0x100000
 
 

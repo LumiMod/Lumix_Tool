@@ -273,6 +273,34 @@ python tools/load_program.py restore
 **下一步**：给 `0x87F4C602` 构造参数（疑似 r0=会话/上下文，r1=路径或模式），
 在 payload 里调用并观察返回值/标记。
 
+## 16.5 新突破：SD 驱动 API（绕开文件系统直接读扇区）
+
+program 模块内含完整的 SD 卡驱动，日志串全部可定位：
+
+| 函数 | 字符串地址 | 引用点 | 函数入口 |
+|---|---|---|---|
+| `SDD_Init` | 0x863C0044 | — | — |
+| `SDD_Open` | 0x863C06F4 | 0x863C0316 | **0x863C0312** |
+| `SDD_Read` | 0x863C0758 | 0x863C0512 | **0x863C0504** |
+| `SDD_Write` | 0x863C0DA8 | 0x863C09CC | — |
+| `SDD_Ioctl` | 0x863C007C | 0x863BFE22 | — |
+
+`SDD_Read` 的寄存器形态（从反汇编读出）：
+
+```asm
+863c0504  push.w {r0-r8,sb,sl,fp,ip,lr}
+          r6 = r0        ; 句柄/上下文指针
+          sl = r1        ; 指向扇区号的指针（代码会 ldr r1,[sl]）
+          r7 = r2        ; 目的缓冲区
+          sb = r3        ; 扇区数量
+          ... 校验 r0/r1 非空 [r6] 非空，[r6+4] 与 2 比较 ...
+```
+
+**意义**：如果不调用相机文件系统，可以自己用 `SDD_Read` 读原始扇区、自己解析 FAT——
+这条路不依赖那些找不到引用的 `CFS_Open`/`SYS_File_*`。
+
+**前提**：需要合法的 SD 驱动句柄（由 `SDD_Open`/`SDD_Init` 建立），以及正确的 DMA/中断上下文。
+
 ## 17. 工具链注意事项
 
 `js/find_pcrel_fast.js` / `js/find_adr_fast.js` / `js/find_movwt.js` 是纯编码扫描器，

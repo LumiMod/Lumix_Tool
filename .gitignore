@@ -21,3 +21,4 @@ sd_test/
 handoff-repo/
 __pycache__/
 *.pyc
+app/*_test*.bat

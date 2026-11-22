@@ -47,6 +47,10 @@ def build_logger(ret, extra=b''):
         str r6, [r0, #8]
         str r7, [r0, #12]
     skip:
+        mov r0, r4
+        mov r1, r5
+        mov r2, r6
+        mov r3, r7
         pop {{r4-r7}}
     """
     ks = Ks(KS_ARCH_ARM, KS_MODE_THUMB)

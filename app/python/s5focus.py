@@ -124,7 +124,7 @@ VERSION_ADDR = 0x863B0000
 VERIFIED_BODY_VERSIONS = {0x0290}
 PROGRAM_VIRT = (0x06280000, 0x07280000)   # program image, 16 MiB at 0x86280000
 LEGACY_SCRATCH_VIRT = (0x0B5B0000, 0x0BAD0000)  # scratch briefly used in commit e59b596
-MAX_TABLE_SAMPLES = 0x100000
+MAX_TABLE_BYTES = 0x100000  # +0x14 is the PCM length in bytes
 
 
 class UnsupportedFirmware(RuntimeError):
@@ -138,11 +138,11 @@ def read_body_version(svc):
 def entry_problem(raw, idx):
     """Why a 32-byte sound-table entry does not look like entry idx (None if it does)."""
     entry_id, addr = struct.unpack_from("<II", raw, 0)
-    samples = struct.unpack_from("<I", raw, 0x14)[0]
+    length = struct.unpack_from("<I", raw, 0x14)[0]  # PCM bytes
     if entry_id != idx:
         return "entry %d has id %d" % (idx, entry_id)
-    if not 0 < samples <= MAX_TABLE_SAMPLES:
-        return "entry %d has implausible sample count %d" % (idx, samples)
+    if not 0 < length <= MAX_TABLE_BYTES:
+        return "entry %d has implausible PCM length %d bytes" % (idx, length)
     ranges = (PROGRAM_VIRT, LEGACY_SCRATCH_VIRT,
               (SCRATCH_START - 0x80000000, SCRATCH_END - 0x80000000))
     if not any(lo <= addr < hi for lo, hi in ranges):

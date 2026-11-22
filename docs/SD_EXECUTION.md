@@ -223,7 +223,36 @@ python tools/load_program.py restore
 2. 验证通过后：把真实程序（更大的 Thumb 代码）放到 `0x86370000`
 3. 自动加载：需要找一个开机/周期运行的挂钩点（当前用半按快门触发）
 
-## 16. 原结论（保留）
+## 16. 新线索：更新模块的 GOT 文件 API（postboot5）
+
+在更新 worker（`0x87F4D32E`）同一模块里找到一套完整的文件 API 日志标签：
+
+| 字符串 | 地址 | 引用点 |
+|---|---|---|
+| `GOT_Check_SDFreeSize` | 0x87F4C858 | 0x87F4C586 (`adr`) |
+| `GOT_File_Open` | 0x87F4CCA8 | 0x87F4C914 (`adr`) |
+| `GOT_File_Write` | 0x87F4CD98 | 0x87F4C9EE (`adr`) |
+| `GOT_File_Close` | 0x87F4CD06 | 待查 |
+| `GOT_LOAD_END` / `GOT_LOAD_CANCEL` | 0x87F4CE3F / 0x87F4CE5F | 待查 |
+
+**意义**：这是第一次找到**有实际代码引用**的文件 API（`adr` 命中，不是消息表）。
+如果 `GOT_File_Open` 能按路径打开 SD 文件，方案 B 就能落地。
+
+**待办**：
+1. 从 0x87F4C914 向前找函数入口（该区间未扫到 16 位 push，需扩大范围或考虑 Thumb-2 push.w）
+2. 确定 `GOT_File_Open` 的参数（路径指针？上下文结构？）与返回值（句柄/状态码）
+3. 写测试 payload 调用它打开 `A:\test.txt`，用标记确认
+
+## 17. 工具链注意事项
+
+`js/find_pcrel_fast.js` / `js/find_adr_fast.js` / `js/find_movwt.js` 是纯编码扫描器，
+绕过反汇编器的对齐问题。已发现并修复的问题：
+
+- JS 位运算把 0x87xxxxxx 截断为负数（改用算术对齐）
+- capstone-js 对部分 16 位指令解码错误（`b40c` push 被解码成 `lsrs`）
+- 线性反汇编遇到 TBB 跳转表/字符串区会错位
+
+## 18. 原结论（保留）
 
 **结论一句话**：S5 具备执行外部程序的所有底层能力，但没有任何现成入口；
 要做"SD 卡执行程序"必须自己构建 payload，且每次开机都要重新注入。

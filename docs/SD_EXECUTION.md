@@ -239,9 +239,39 @@ python tools/load_program.py restore
 如果 `GOT_File_Open` 能按路径打开 SD 文件，方案 B 就能落地。
 
 **待办**：
-1. 从 0x87F4C914 向前找函数入口（该区间未扫到 16 位 push，需扩大范围或考虑 Thumb-2 push.w）
+1. ~~从 0x87F4C914 向前找函数入口~~ → **已找到：`0x87F4C602`**
 2. 确定 `GOT_File_Open` 的参数（路径指针？上下文结构？）与返回值（句柄/状态码）
 3. 写测试 payload 调用它打开 `A:\test.txt`，用标记确认
+
+### GOT_File_Open 调用链（已还原）
+
+```
+0x87F4C602  push.w {r3-r8,sb,sl,fp,lr}
+            r5 = r1 (arg2), r4 = r0 (arg1)
+            b   0x87F4C8CC            ; 中间是字符串数据
+0x87F4C8CC  adr r0, =0x87F4CCA8       ; "GOT_File_Open" 日志标签
+            ldr r0, [pc,#0x3cc]       ; 全局上下文
+            movw fp, #0x5E2
+            ldr.w sl, [pc,#0x3c4]
+            cbz r0  -> r4 = 1 (错误码)
+            cbz r5  -> r4 = 2
+            ... 参数校验 ...
+0x87F4C904  blx 0x8782BD3C            ; memset/memcpy 类
+0x87F4C908  ldr r5, [pc,#0x398]
+0x87F4C914  adr r0, =0x87F4CCA8       ; 日志
+            ...
+            bl  0x87311650  -> b.w 0x867749BA   ; program 模块
+            bl  0x87311658  -> b.w 0x867749D0   ; program 模块
+```
+
+两个导入的真实目标：
+
+- `0x867749BA`：`movs r0,#1; bl 0x867411F8; ... b.w 0x86740EAC`
+- `0x867749D0`：`push {r1,r2,r3,r4,r5,lr}`，检查 r0/r2 非空，
+  以 `(r1=3, r2=1, r3=0)` 调 `0x86470A96`
+
+**下一步**：给 `0x87F4C602` 构造参数（疑似 r0=会话/上下文，r1=路径或模式），
+在 payload 里调用并观察返回值/标记。
 
 ## 17. 工具链注意事项
 

@@ -25,3 +25,4 @@ __pycache__/
 app/*_test*.bat
 app/vendor/
 app/release/
+.DS_Store

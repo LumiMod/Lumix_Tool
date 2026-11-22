@@ -86,7 +86,74 @@ bl   0x868E59A0         ; 日志分发（参数 r1 = 消息 ID）
 
 风险：更新器是刷写流程的核心，改错可能让相机无法更新（但不影响正常启动）。
 
-## 6. 下一步
+## 6. 已排除的分支
+
+| 分支 | 结果 |
+|---|---|
+| Linux 侧热插拔/插卡脚本 | ❌ 无（rootfs 里没有 mdev/udev 执行规则） |
+| Linux 侧 init 脚本扫描 SD | ❌ 无（`rcS` 只跑 `S02/S03/S10/S20`） |
+| `netstart` 挂载 | 仅挂载 `/dev/mtdblock1`（rootfs2）到 `/mnt/rfs2`，与 SD 无关 |
+| 菜单/配置触发 | ❌ 菜单无相关项 |
+
+## 7. 候选函数：postboot3 的 `0x877AAAA0`
+
+反汇编 `0x877AAAA0` 得到：
+
+```asm
+877aaaa0  push {r4,r5,r6,r7,lr}
+877aaaa2  sub  sp, #0x4c
+877aaaa4  mov  r6, r3
+877aaaa6  mov  r7, r2
+877aaaa8  mov  r4, r1
+877aaaaa  movs r1, #0x38
+877aaaac  mov  r5, r0
+877aaaae  mov  r0, sp
+877aaab0  blx  #0x8782bd38        ; memset 类
+877aaab8  strd r0, r4, [sp, #0x38]
+877aaabc  adds r0, r4, r7
+877aaabe  strd r0, r4, [sp, #0x40]
+877aaac4  bl   #0x877aa4f4        ; 取上下文
+877aaac8  add  r2, sp, #0x38
+877aaaca  movw r1, #0xc040        ; 日志消息 ID
+877aaace  bl   #0x868e59a0        ; 日志分发
+...
+```
+
+它紧邻 `CFS_Open(%s)` 等日志串，很可能是 **CFS_Open 的包装/实现之一**。
+下一步可以反汇编它的调用者（BL 到 0x877AAAA0）来确认参数语义。
+
+## 8. CFS 操作分发器（新发现）
+
+`0x877AADE0` 处是一个 **TBB 跳转表分发器**，按操作码 `r6`（0..0xB）分发：
+
+```asm
+877aade2  cmp   r6, #0xc
+877aadee  tbb   [pc, r6]
+877aae20  ldrd  r1, r2, [r4, #0x14]
+877aae26  bl    #0x877aaaa0      ; 操作 4
+```
+
+各操作函数及它们调用的系统调用桩（`0x868E59xx` 表）：
+
+| 操作函数 | 调用的桩 | 备注 |
+|---|---|---|
+| 0x877AA83A | 日志桩 | |
+| 0x877AA8C2 | 0x868E597C + 日志 | |
+| 0x877AAA48 | 日志桩 | |
+| 0x877AAA72 | 日志桩 | |
+| 0x877AAAA0 | 日志桩（消息 ID 0xC040） | 紧邻 `CFS_Open(%s)`，疑为 Open |
+| 0x877AAB12 | 内部调用为主 | 字符串 `CFS_Open(%s)` 位于其体内 |
+| 0x877AACB2 | 0x868E5958 | |
+| 0x877AAD1A | 0x868E5958 + 0x868E5970 | |
+| 0x877AAD80 | 0x868E5970 | |
+
+对应桩的目标：`0x868E5958 → 0x864D38FA`，`0x868E5970 → 0x864D43F8`，
+`0x868E597C → 0x864D41FE`。
+
+**意义**：payload 可以绕过 CFS 包装，直接调用这些桩完成文件操作；下一步只需确定
+open/read/write/close 与桩/操作的对应关系。
+
+## 9. 下一步
 
 1. **恢复消息表**（ID → 字符串）——这是解锁全部日志反查的钥匙，价值最大
 2. 用消息表反查 `CFS_Open` / `CFS_Read` 的调用点 → 得到函数地址

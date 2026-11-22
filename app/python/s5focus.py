@@ -8,7 +8,7 @@ Commands:
   apply-slot <index> <pcm> <samples> <region_addr> -> guarded physical region
   restore                        -> restore the stock ID1 entry
   restore-id <id> <32-byte-hex>  -> restore any entry from a saved hex blob
-  scan [start] [length]          -> read-only map of free (0x55) RAM after 0x8F000000
+  scan [start] [length]          -> read-only map of free (0x55/zero) scratch RAM
 
 All writes are RAM-only; a battery pull restores stock behaviour.
 """
@@ -32,8 +32,8 @@ def protocol():
 
 TBL = 0x86E35100
 ID1 = TBL + 32
-SCRATCH_START = 0x8F000000
-SCRATCH_END = 0x8F800000
+SCRATCH_START = 0x8B5B0000
+SCRATCH_END = 0x8BAD0000
 HEADER_MAGIC = b"LMXTSLOT"
 HEADER_SIZE = 16
 SLOT_COUNT = 28
@@ -71,7 +71,8 @@ def validate_region(addr, samples):
     if (type(addr) is not int or addr % 1024 != 0
             or not SCRATCH_START <= addr < SCRATCH_END
             or addr + HEADER_SIZE + samples * 2 > SCRATCH_END):
-        raise ValueError("region address must be 1 KiB aligned and span within 0x8F000000..0x8F800000")
+        raise ValueError("region address must be 1 KiB aligned and span within 0x%08X..0x%08X"
+                         % (SCRATCH_START, SCRATCH_END))
     return addr
 
 
@@ -92,13 +93,13 @@ def decode_header(raw):
 
 def region_is_free(raw, idx):
     validate_index(idx)
-    if raw == b"\x55" * len(raw):
+    if raw == b"\x55" * len(raw) or raw == b"\x00" * len(raw):
         return True
     header = decode_header(raw)
     if header is None or header[0] != idx:
         return False
     tail = raw[HEADER_SIZE + header[1] * 2:]
-    return tail == b"\x55" * len(tail)
+    return tail == b"\x55" * len(tail) or tail == b"\x00" * len(tail)
 
 
 class RegionNotFree(RuntimeError):
@@ -263,7 +264,7 @@ def summarize_blocks(start, labels, block=1024):
              "kind": names[r["kind"]], "kib": (r["end"] - r["start"]) // 1024} for r in runs]
 
 
-def cmd_scan(start=0x8F000000, length=0x800000):
+def cmd_scan(start=SCRATCH_START, length=SCRATCH_END - SCRATCH_START):
     """Read-only: map which 1 KiB blocks after the scratch base are free."""
     if (start % 1024 or length <= 0 or length % 1024
             or start < SCRATCH_START or start + length > SCRATCH_END):

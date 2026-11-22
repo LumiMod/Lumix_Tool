@@ -1,7 +1,7 @@
 // Shared by the main process and renderer: plans are advisory until the
 // backend guards the exact bytes. All intervals use an exclusive end.
-export const START = 0x8F000000;
-export const END = 0x8F800000;
+export const START = 0x8B5B0000;
+export const END = 0x8BAD0000;
 export const BLOCK = 1024;
 export const KINDS = ['free-0x55', 'lumixtool', 'data', 'zero'];
 export const hexAddress = value => `0x${Number(value).toString(16).padStart(8, '0').toUpperCase()}`;
@@ -45,7 +45,7 @@ export function liveRegions(entries = []) {
 function freeRanges(map, excluded = []) {
   if (!validMap(map)) return [];
   const ranges = [];
-  for (const item of map.runs.filter(item => item.kind === 'free-0x55')) {
+  for (const item of map.runs.filter(item => item.kind === 'free-0x55' || item.kind === 'zero')) {
     let parts = [{ start: Number(item.start), end: Number(item.end) }];
     for (const occupied of excluded) {
       parts = parts.flatMap(part => !overlaps(part, occupied) ? [part] : [
@@ -127,7 +127,9 @@ export function markRange(map, start, end, kind) {
 }
 
 export function mockMemoryMap() {
-  const edges = [START, 0x8F080000, 0x8F0A0000, 0x8F0B0000, 0x8F400000, END];
+  const span = END - START;
+  const edge = fraction => START + Math.floor((span * fraction) / BLOCK) * BLOCK;
+  const edges = [START, edge(0.2), edge(0.3), edge(0.45), edge(0.8), END];
   const kinds = ['free-0x55', 'data', 'zero', 'free-0x55', 'data'];
   return { start: hexAddress(START), length: END - START,
     runs: kinds.map((kind, i) => run(edges[i], edges[i + 1], kind)) };

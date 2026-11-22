@@ -40,18 +40,18 @@ Windows 可双击 `start.bat`，若缺少 `renderer-dist\index.html` 会先运�
 
 `pnputil` 接受包后，应用会重新检测 WinUSB 服务、设备问题代码和 `DeviceInterfaceGUIDs`；仅三项验证通过才显示「驱动正常」并推进引导。已添加包但未绑定时会保留提示。自签名目录在目标 Windows 的签名策略、Secure Boot、驱动排名和目录格式要求下仍需实测，失败可查看原始输出及 `C:\Windows\INF\setupapi.dev.log`，再使用手动方案。不会更改签名或启动策略。完整说明见 [驱动安装指南](../docs/DRIVER_SETUP.md#3-一键安装lumixtool-内置)。
 
-### Windows 发行包（单文件便携 exe）
+### Windows 发行包（免安装 zip）
 
 ```sh
 cd app
-npm run dist:win   # 输出 release/LumixTool-<版本>-portable-x64.exe
+npm run dist:win   # 输出 release/LumixTool-<版本>-win-x64.zip
 ```
 
 - `scripts/fetch-python.mjs` 下载 python.org 官方 Windows 嵌入版 Python（版本与 SHA-256 写死在脚本里，缓存于 `vendor/cache/`），解压到 `vendor/python-win-amd64/`，打包为 `resources/python/`。打包版优先使用它，用户无需安装 Python；设置里手动选的路径仍然优先。
 - electron-builder 配置在 `package.json` 的 `build` 字段：`python/` 解包到 `app.asar.unpacked`（外部 Python 进程读不了 asar），`driver/` 留在 asar 内（`driver.js` 会先复制到临时目录再提权运行）。
-- 用 `toolsets.nsis: "1.2.1"`，它带 Apple 芯片原生的 makensis，可以在 M 系列 Mac 上交叉打包。
+- 不做单文件便携 exe：electron-builder 的 portable 目标依赖 NSIS。默认的 NSIS 3.0.4.1 只有 Intel 版，Apple 芯片 Mac 需要 Rosetta；改用 NSIS 3.12（`toolsets.nsis: "1.2.1"`）打出的 exe 在 Windows 上以普通权限启动会报「Error writing temporary file」，只有管理员运行才能打开。所以改发 zip，解压后双击 `LumixTool.exe`。
 - React / antd 由 Vite 打进 `renderer-dist/`，所以都放在 devDependencies，不进安装包。
-- exe 未做代码签名，首次运行 Windows SmartScreen 会提示，需点「更多信息 → 仍要运行」。
+- `LumixTool.exe` 未做代码签名，首次运行 Windows SmartScreen 会提示，需点「更多信息 → 仍要运行」。
 
 管理员脚本不接收 renderer 提供的脚本路径或任意命令，只接收应用生成的结果路径及可选证书清理标记。外链 IPC 仅允许精确的 `https://zadig.akeo.ie/`，renderer 使用文字按钮调用，不直接导航。
 

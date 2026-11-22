@@ -1,6 +1,6 @@
 {
   "name": "lumixtool",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "LumixTool — a local toolkit for Panasonic LUMIX cameras",
   "main": "main.js",
   "scripts": {

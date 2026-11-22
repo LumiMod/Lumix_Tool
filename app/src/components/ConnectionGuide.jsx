@@ -42,7 +42,7 @@ export default function ConnectionGuide({ device, navigate, active }) {
           <Title level={4}>连接 USB，检查相机</Title>
           <Paragraph>将相机连接到电脑，确认服务模式标识为 <Text code>04DA:2370</Text>。关闭其他占用相机的程序，再检查连接。</Paragraph>
           <Alert showIcon type={camera.error ? 'warning' : 'info'}
-            title={ready ? `已连接 ${camera.model} · 机身版本 ${camera.body_version || '未知'}` : checking ? '正在检测设备…' : '等待设备连接'}
+            title={ready ? `已连接 LUMIX ${camera.model || 'DC-S5'} · 机身版本 ${camera.body_version || '未知'}` : checking ? '正在检测设备…' : '等待设备连接'}
             description={ready ? '设备已就绪，可以开始使用相机工具。' : camera.error || camera.platformNote || '准备好后，点击下方按钮检查设备。'} />
         </>}
         <Flex justify="space-between" className="section-actions">

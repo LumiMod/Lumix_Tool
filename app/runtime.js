@@ -357,8 +357,8 @@ class Runtime {
       pcm.copy(span, 16);
       const virtual = addr + 16 - 0x80000000;
       raw.writeUInt32LE(virtual, 4);
-      raw.writeUInt32LE(payload.samples, 0x14);
-      this.mockEntries[payload.index] = { ...this.mockEntries[payload.index], addr: hexAddress(virtual), size: payload.samples, hex: raw.toString('hex') };
+      raw.writeUInt32LE(payload.samples * 2, 0x14);
+      this.mockEntries[payload.index] = { ...this.mockEntries[payload.index], addr: hexAddress(virtual), size: payload.samples * 2, hex: raw.toString('hex') };
       this.mockState.custom = true;
       return { ok: true, index: payload.index, entry: raw.toString('hex') };
     }

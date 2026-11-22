@@ -32,8 +32,8 @@ def protocol():
 
 TBL = 0x86E35100
 ID1 = TBL + 32
-SCRATCH_START = 0x8B5B0000
-SCRATCH_END = 0x8BAD0000
+SCRATCH_START = 0x8F000000
+SCRATCH_END = 0x8F800000
 HEADER_MAGIC = b"LMXTSLOT"
 HEADER_SIZE = 16
 SLOT_COUNT = 28
@@ -92,14 +92,13 @@ def decode_header(raw):
 
 
 def region_is_free(raw, idx):
+    """The 0x8F scratch area keeps stale bytes across boots, so only an
+    existing slot header for a different index counts as occupied."""
     validate_index(idx)
-    if raw == b"\x55" * len(raw) or raw == b"\x00" * len(raw):
-        return True
     header = decode_header(raw)
-    if header is None or header[0] != idx:
-        return False
-    tail = raw[HEADER_SIZE + header[1] * 2:]
-    return tail == b"\x55" * len(tail) or tail == b"\x00" * len(tail)
+    if header is None:
+        return True
+    return header[0] == idx
 
 
 class RegionNotFree(RuntimeError):
@@ -132,7 +131,8 @@ def cmd_status():
         print(json.dumps({
             "connected": True,
             "id1_addr": "0x%08X" % addr,
-            "id1_size": size,
+            "id1_bytes": size,
+            "id1_samples": size // 2,
             "custom": SCRATCH_START - 0x80000000 <= addr < SCRATCH_END - 0x80000000,
             "body_version": "0x%04X" % ver,
         }))
@@ -154,6 +154,8 @@ def cmd_dump():
                 "addr": "0x%08X" % struct.unpack_from("<I", e, 4)[0],
                 "addr2": "0x%08X" % struct.unpack_from("<I", e, 8)[0],
                 "size": struct.unpack_from("<I", e, 0x14)[0],
+                "bytes": struct.unpack_from("<I", e, 0x14)[0],
+                "samples": struct.unpack_from("<I", e, 0x14)[0] // 2,
                 "hex": e.hex(),
             })
         print(json.dumps({"ok": True, "entries": out}))
@@ -188,7 +190,7 @@ def write_pcm(svc, path, samples, idx, region_addr):
 def retarget(svc, idx, samples, pcm_virt):
     base = entry_addr(idx)
     write_halfwords(svc, base + 4, struct.pack("<I", pcm_virt))
-    write_halfwords(svc, base + 0x14, struct.pack("<I", samples))
+    write_halfwords(svc, base + 0x14, struct.pack("<I", samples * 2))
     return read_bytes(svc, base, 32)
 
 
@@ -203,7 +205,7 @@ def cmd_apply(path, samples, idx, region_addr):
         pcm_virt = write_pcm(svc, path, samples, idx, region_addr)
         e = retarget(svc, idx, samples, pcm_virt)
         ok = (struct.unpack_from("<I", e, 4)[0] == pcm_virt
-              and struct.unpack_from("<I", e, 0x14)[0] == samples)
+              and struct.unpack_from("<I", e, 0x14)[0] == samples * 2)
         print(json.dumps({"ok": ok, "index": idx, "entry": e.hex(),
                           "error": None if ok else "table verification failed"}))
     finally:

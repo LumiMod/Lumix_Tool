@@ -3,7 +3,8 @@ export const SCRATCH_VIRTUAL = 0x0F000000;
 export function originalSamples(hex) {
   if (typeof hex !== 'string' || !/^[0-9a-f]{64}$/i.test(hex)) return null;
   const bytes = Uint8Array.from(hex.match(/../g), byte => parseInt(byte, 16));
-  return new DataView(bytes.buffer).getUint32(0x14, true);
+  // The table stores PCM length in bytes at +0x14; the UI works in samples.
+  return new DataView(bytes.buffer).getUint32(0x14, true) / 2;
 }
 
 export function slotState(entry, original) {

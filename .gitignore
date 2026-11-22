@@ -26,3 +26,7 @@ app/*_test*.bat
 app/vendor/
 app/release/
 .DS_Store
+et_acl2/
+et_acl_test/
+F:/et/
+

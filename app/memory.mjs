@@ -1,7 +1,7 @@
 // Shared by the main process and renderer: plans are advisory until the
 // backend guards the exact bytes. All intervals use an exclusive end.
-export const START = 0x8B5B0000;
-export const END = 0x8BAD0000;
+export const START = 0x8F000000;
+export const END = 0x8F800000;
 export const BLOCK = 1024;
 export const KINDS = ['free-0x55', 'lumixtool', 'data', 'zero'];
 export const hexAddress = value => `0x${Number(value).toString(16).padStart(8, '0').toUpperCase()}`;
@@ -26,26 +26,28 @@ export function validMap(map) {
 export function liveRegions(entries = []) {
   return entries.flatMap(entry => {
     // dump's 32 bytes are authoritative, including in the presence of stale UI fields.
-    let pcm = Number(entry.addr), samples = Number(entry.size);
+    // The table stores the PCM length in BYTES at +0x14 (verified on hardware).
+    let pcm = Number(entry.addr), bytes = Number(entry.size);
     if (typeof entry.hex === 'string' && /^[0-9a-f]{64}$/i.test(entry.hex)) {
-      const bytes = Uint8Array.from(entry.hex.match(/../g), part => parseInt(part, 16));
-      const view = new DataView(bytes.buffer);
+      const bytesArr = Uint8Array.from(entry.hex.match(/../g), part => parseInt(part, 16));
+      const view = new DataView(bytesArr.buffer);
       pcm = view.getUint32(4, true);
-      samples = view.getUint32(0x14, true);
+      bytes = view.getUint32(0x14, true);
     }
     pcm += 0x80000000;
-    if (!Number.isInteger(pcm) || !Number.isInteger(samples) || samples < 0 || pcm < START || pcm >= END) return [];
+    if (!Number.isInteger(pcm) || !Number.isInteger(bytes) || bytes < 0 || pcm < START || pcm >= END) return [];
+    const samples = bytes / 2;
     const start = Math.max(START, pcm - 16);
-    const end = Math.min(END, roundUp(pcm + samples * 2));
+    const end = Math.min(END, roundUp(pcm + bytes));
     return [{ index: entry.index, start, end, capacity: end - start, samples,
-      reusable: pcm - 16 >= START && start % BLOCK === 0 && samples > 0 && pcm + samples * 2 <= END }];
+      reusable: pcm - 16 >= START && start % BLOCK === 0 && bytes > 0 && pcm + bytes <= END }];
   });
 }
 
 function freeRanges(map, excluded = []) {
   if (!validMap(map)) return [];
   const ranges = [];
-  for (const item of map.runs.filter(item => item.kind === 'free-0x55' || item.kind === 'zero')) {
+  for (const item of map.runs.filter(item => item.kind !== 'lumixtool')) {
     let parts = [{ start: Number(item.start), end: Number(item.end) }];
     for (const occupied of excluded) {
       parts = parts.flatMap(part => !overlaps(part, occupied) ? [part] : [

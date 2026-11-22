@@ -1,129 +1,136 @@
-const fs0 = require('fs');
-const os0 = require('os');
-const path0 = require('path');
-const LOG = path0.join(os0.tmpdir(), 's5focus_startup.log');
-function logLine(s) {
-  try { fs0.appendFileSync(LOG, new Date().toISOString() + ' ' + s + '\n'); } catch (e) {}
-}
-logLine('--- boot ---');
-logLine('ELECTRON_RUN_AS_NODE=' + process.env.ELECTRON_RUN_AS_NODE);
-process.on('uncaughtException', (e) => logLine('uncaught: ' + ((e && e.stack) || e)));
-process.on('unhandledRejection', (e) => logLine('rejection: ' + ((e && e.stack) || e)));
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell } = require('electron');
+const { Runtime } = require('./runtime');
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-logLine('electron api: app=' + typeof app + ' BrowserWindow=' + typeof BrowserWindow);
+const LOG = path.join(os.tmpdir(), 'lumixtool_startup.log');
+function logLine(message) {
+  try { fs.appendFileSync(LOG, `${new Date().toISOString()} ${message}\n`); } catch {}
+}
+logLine('--- LumixTool boot ---');
+process.on('uncaughtException', error => logLine(`uncaught: ${error.stack || error}`));
+process.on('unhandledRejection', error => logLine(`rejection: ${error?.stack || error}`));
 if (!app || typeof app.whenReady !== 'function') {
-  logLine('FATAL: electron api missing (running as node?)');
+  logLine('FATAL: Electron API missing; clear ELECTRON_RUN_AS_NODE.');
   process.exit(1);
 }
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const { spawn, spawnSync } = require('child_process');
 
+app.setName('LumixTool');
+const userData = path.join(app.getPath('appData'), 'LumixTool');
+fs.mkdirSync(userData, { recursive: true });
+app.setPath('userData', userData);
 let win = null;
-
-const CANDIDATE_PYTHONS = [
-  process.env.S5_PYTHON,
-  'C:\\Users\\28985\\.dsh\\dsh-runtimes\\dsh-next-primary-runtime\\dependencies\\python\\python.exe',
-  'python',
-  'py',
-].filter(Boolean);
-
-function configPath() {
-  return path.join(app.getPath('userData'), 'config.json');
-}
-
-function loadConfig() {
-  try { return JSON.parse(fs.readFileSync(configPath(), 'utf8')); } catch (e) { return {}; }
-}
-
-function saveConfig(cfg) {
-  try {
-    fs.mkdirSync(path.dirname(configPath()), { recursive: true });
-    fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2));
-  } catch (e) {}
-}
-
-function testPython(exe) {
-  const r = spawnSync(exe, ['-c', 'import sys;print(sys.version_info[0])'], { encoding: 'utf8', timeout: 8000 });
-  return r.status === 0 && (r.stdout || '').trim().startsWith('3');
-}
-
-function findPython() {
-  const cfg = loadConfig();
-  const list = [cfg.python].concat(CANDIDATE_PYTHONS);
-  for (const exe of list) {
-    if (!exe) continue;
-    if (testPython(exe)) return exe;
-  }
-  return null;
-}
-
-function pythonExe() {
-  const p = findPython();
-  if (!p) throw new Error('未找到可用的 Python 3，请在设置里指定路径');
-  return p;
-}
-
-function scriptPath() {
-  return path.join(__dirname, 'python', 's5focus.py');
-}
-
-function runPython(args, onLine) {
-  return new Promise((resolve, reject) => {
-    const exe = pythonExe();
-    const child = spawn(exe, ['-u', scriptPath()].concat(args), { windowsHide: true });
-    let out = '';
-    child.stdout.on('data', (d) => {
-      const text = d.toString('utf8');
-      out += text;
-      text.split(/\r?\n/).forEach((line) => {
-        if (line.trim() && onLine) onLine(line.trim());
-      });
-    });
-    child.stderr.on('data', (d) => { out += d.toString('utf8'); });
-    child.on('error', reject);
-    child.on('close', (code) => resolve({ code, out }));
-  });
-}
+let operation = null;
+const runtime = new Runtime({
+  configPath: path.join(app.getPath('userData'), 'config.json'),
+  legacyConfigPath: path.join(app.getPath('appData'), 's5-focus-sound', 'config.json'),
+  // Packaged builds unpack python/ from the asar so an external interpreter can read it.
+  scriptPath: path.join(__dirname.replace(/app\.asar$/, 'app.asar.unpacked'), 'python', 's5focus.py'),
+  // Release builds ship the official Windows embeddable Python under resources/python.
+  bundledPython: app.isPackaged && process.platform === 'win32' ? path.join(process.resourcesPath, 'python', 'python.exe') : null,
+  mock: process.env.LUMIXTOOL_MOCK === '1',
+  onProgress: progress => {
+    if (win && !win.isDestroyed()) win.webContents.send('progress', progress);
+  },
+});
 
 function createWindow() {
-  logLine('creating window');
-  try {
   win = new BrowserWindow({
-    width: 1000,
-    height: 780,
-    minWidth: 860,
-    minHeight: 640,
-    backgroundColor: '#0d1117',
-    title: 'S5 对焦音效定制器',
-    show: true,
+    width: 1220, height: 850, minWidth: 960, minHeight: 700,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#141414' : '#f5f5f5', title: 'LumixTool',
+    autoHideMenuBar: true, show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
-  } catch (e) {
-    logLine('BrowserWindow threw: ' + ((e && e.stack) || e));
-    throw e;
-  }
-  logLine('window created');
-  win.webContents.on('did-fail-load', (e, code, desc) => {
-    logLine('PAGE LOAD FAILED ' + code + ' ' + desc);
+  win.setMenuBarVisibility(false);
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.on('will-attach-webview', event => event.preventDefault());
+  win.webContents.on('before-input-event', (event, input) => {
+    if (operation && (input.key === 'F5' || ((input.control || input.meta) && input.key.toLowerCase() === 'r'))) event.preventDefault();
   });
-  win.webContents.on('console-message', (e, level, message) => {
-    logLine('RENDERER: ' + level + ' ' + message);
+  win.webContents.on('did-fail-load', (_event, code, description) => logLine(`PAGE LOAD FAILED ${code} ${description}`));
+  // Electron 45 uses the console-message event's details object.
+  win.webContents.on('console-message', event => logLine(`RENDERER: ${event.level} ${event.message}`));
+  win.webContents.on('render-process-gone', (_event, details) => logLine(`RENDERER EXIT: ${details.reason}`));
+  win.once('ready-to-show', () => win?.show());
+  win.webContents.once('did-finish-load', () => logLine('PAGE LOADED'));
+  win.on('close', event => {
+    if (!operation || operation === 'status' || operation === 'driver-status') return;
+    const answer = dialog.showMessageBoxSync(win, {
+      type: 'warning', title: '操作尚未完成',
+      message: '设备操作正在进行，确定退出 LumixTool？',
+      detail: '建议等待完成。退出会中断相机操作；已启动的管理员驱动脚本可能继续运行。',
+      buttons: ['继续等待', '退出'], defaultId: 0, cancelId: 0,
+    });
+    if (answer === 0) event.preventDefault();
   });
-  win.webContents.on('did-finish-load', () => {
-    logLine('PAGE LOADED');
-    win.show();
-    win.focus();
-  });
-  win.loadFile(path.join(__dirname, 'index.html'));
   win.on('closed', () => { win = null; });
+  if (process.env.LUMIXTOOL_DEV_URL) win.loadURL(process.env.LUMIXTOOL_DEV_URL);
+  else win.loadFile(path.join(__dirname, 'renderer-dist', 'index.html'));
 }
+
+nativeTheme.on('updated', () => {
+  if (win && !win.isDestroyed()) win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#141414' : '#f5f5f5');
+});
+
+// Serialize device access even if more than one renderer request arrives.
+async function deviceOperation(name, callback) {
+  if (operation) return { ok: false, busy: true, error: '另一个操作正在进行，请等待完成。' };
+  operation = name;
+  try { return await callback(); }
+  catch (error) { return { ok: false, connected: false, error: error.message || String(error) }; }
+  finally { operation = null; }
+}
+
+ipcMain.handle('env', () => runtime.environment());
+ipcMain.handle('pick-python', async () => {
+  if (operation) return { ok: false, error: '请等待相机操作完成后再更换 Python。' };
+  const result = await dialog.showOpenDialog(win, {
+    title: '为 LumixTool 选择 Python 3', properties: ['openFile'],
+    filters: process.platform === 'win32' ? [{ name: 'Python', extensions: ['exe'] }] : [],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  return runtime.setPython(result.filePaths[0]);
+});
+ipcMain.handle('pick-audio', async () => {
+  if (operation && operation !== 'status') return null;
+  const result = await dialog.showOpenDialog(win, {
+    title: '选择替换音效', properties: ['openFile'],
+    filters: [{ name: '音频', extensions: ['wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg', 'opus'] }],
+  });
+  return result.canceled ? null : result.filePaths[0] || null;
+});
+ipcMain.handle('read-file', async (_event, filename) => {
+  if (typeof filename !== 'string' || !path.isAbsolute(filename)) throw new Error('无效的文件路径。');
+  const stat = await fs.promises.stat(filename);
+  if (!stat.isFile() || stat.size > 100 * 1024 * 1024) throw new Error('请选择不超过 100 MB 的音频文件。');
+  return fs.promises.readFile(filename);
+});
+ipcMain.handle('status', () => deviceOperation('status', () => runtime.inspect()));
+ipcMain.handle('driver-status', () => deviceOperation('driver-status', () => runtime.driverStatus()));
+ipcMain.handle('driver-install', () => deviceOperation('driver-install', () => runtime.installDriver()));
+ipcMain.handle('driver-uninstall', (_event, options) => deviceOperation('driver-uninstall', () => runtime.uninstallDriver({ removeCertificate: options?.removeCertificate === true })));
+ipcMain.handle('open-external', async (_event, url) => {
+  if (url !== 'https://zadig.akeo.ie/') return { ok: false, error: '不允许打开此链接。' };
+  try { await shell.openExternal(url); return { ok: true }; }
+  catch (error) { return { ok: false, error: error.message }; }
+});
+ipcMain.handle('dump', () => deviceOperation('dump', () => runtime.inspect()));
+ipcMain.handle('apply-slot', (_event, payload) => deviceOperation('apply-slot', () => runtime.soundBatch('apply', { ...payload, indices: [payload?.index] })));
+ipcMain.handle('apply-slots', (_event, payload) => deviceOperation('apply-slots', () => runtime.soundBatch('apply', payload)));
+ipcMain.handle('restore-id', (_event, payload) => deviceOperation('restore-id', () => runtime.soundBatch('restore', { ...payload, indices: [payload?.index] })));
+ipcMain.handle('restore-all', (_event, payload) => deviceOperation('restore-all', () => runtime.soundBatch('restore', { version: payload?.version })));
+ipcMain.handle('rename-sound', (_event, payload) => deviceOperation('rename-sound', () => runtime.renameSound(payload)));
+ipcMain.handle('apply', (_event, payload) => deviceOperation('apply', () => runtime.apply(payload)));
+ipcMain.handle('restore', () => deviceOperation('restore', () => runtime.restore()));
+ipcMain.handle('mock-configure', (_event, options) => {
+  if (operation) return { ok: false, error: '请等待当前操作完成。' };
+  return runtime.configureMock(options);
+});
 
 app.whenReady().then(() => {
   logLine('app ready');
@@ -131,77 +138,5 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-}).catch((e) => {
-  logLine('whenReady failed: ' + ((e && e.stack) || e));
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
-
-ipcMain.handle('env', async () => {
-  let py = null;
-  try { py = pythonExe(); } catch (e) {}
-  return { python: py, platform: process.platform, userData: app.getPath('userData') };
-});
-
-ipcMain.handle('pick-python', async () => {
-  const r = await dialog.showOpenDialog(win, {
-    title: '选择 python.exe',
-    properties: ['openFile'],
-    filters: [{ name: 'Python', extensions: ['exe'] }],
-  });
-  if (r.canceled || !r.filePaths[0]) return null;
-  const exe = r.filePaths[0];
-  if (!testPython(exe)) return { ok: false };
-  const cfg = loadConfig();
-  cfg.python = exe;
-  saveConfig(cfg);
-  return { ok: true, python: exe };
-});
-
-ipcMain.handle('pick-audio', async () => {
-  const r = await dialog.showOpenDialog(win, {
-    title: '选择音频文件',
-    properties: ['openFile'],
-    filters: [{ name: '音频', extensions: ['wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg', 'opus'] }],
-  });
-  if (r.canceled || !r.filePaths[0]) return null;
-  return r.filePaths[0];
-});
-
-ipcMain.handle('read-file', async (evt, p) => {
-  return fs.readFileSync(p);
-});
-
-ipcMain.handle('status', async () => {
-  const res = await runPython(['status']);
-  const lines = res.out.trim().split(/\r?\n/).filter(Boolean);
-  const last = lines.length ? lines[lines.length - 1] : '{}';
-  try { return JSON.parse(last); } catch (e) { return { connected: false, error: res.out }; }
-});
-
-ipcMain.handle('apply', async (evt, payload) => {
-  const tmp = path.join(os.tmpdir(), 's5focus_' + Date.now() + '.pcm');
-  fs.writeFileSync(tmp, Buffer.from(payload.pcm));
-  try {
-    const res = await runPython(['apply', tmp, String(payload.samples)], (line) => {
-      if (line.startsWith('PROGRESS')) {
-        const parts = line.split(' ');
-        if (win) win.webContents.send('progress', { done: Number(parts[1]), total: Number(parts[2]) });
-      }
-    });
-    const lines = res.out.trim().split(/\r?\n/).filter(Boolean);
-    const last = lines.length ? lines[lines.length - 1] : '{}';
-    try { return JSON.parse(last); } catch (e) { return { ok: false, error: res.out }; }
-  } finally {
-    try { fs.unlinkSync(tmp); } catch (e) {}
-  }
-});
-
-ipcMain.handle('restore', async () => {
-  const res = await runPython(['restore']);
-  const lines = res.out.trim().split(/\r?\n/).filter(Boolean);
-  const last = lines.length ? lines[lines.length - 1] : '{}';
-  try { return JSON.parse(last); } catch (e) { return { ok: false, error: res.out }; }
-});
+}).catch(error => logLine(`whenReady failed: ${error.stack || error}`));
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

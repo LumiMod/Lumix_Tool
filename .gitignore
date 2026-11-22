@@ -2,6 +2,7 @@
 node_modules/
 app/node_modules/
 app/dist/
+app/renderer-dist/
 dist/
 
 # large artifacts (firmware dumps, RAM captures, screenshots, archives)
@@ -22,3 +23,5 @@ handoff-repo/
 __pycache__/
 *.pyc
 app/*_test*.bat
+app/vendor/
+app/release/

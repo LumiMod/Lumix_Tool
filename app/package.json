@@ -1,0 +1,13 @@
+{
+  "name": "s5-focus-sound",
+  "version": "0.1.0",
+  "description": "Panasonic DC-S5 custom focus sound tool (service mode)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-packager": "^17.1.2"
+  }
+}

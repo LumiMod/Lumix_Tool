@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;" />
+  <title>S5 对焦音效定制器</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">S5</div>
+        <div>
+          <h1>对焦音效定制器</h1>
+          <p class="sub">Panasonic DC-S5 · 服务模式 · RAM 修改</p>
+        </div>
+      </div>
+      <div class="status-wrap">
+        <span id="pill" class="pill pill-idle">未连接</span>
+        <button id="btnRefresh" class="ghost">刷新</button>
+      </div>
+    </header>
+
+    <section class="guide">
+      <div class="guide-head">
+        <h2>新手引导</h2>
+        <span class="hint">按顺序完成即可，第一次使用建议全部读一遍</span>
+      </div>
+      <ol id="steps" class="steps">
+        <li data-step="1"><b>准备驱动</b><span>用 Zadig 把相机的 <code>04DA:2370</code> 接口绑定为 WinUSB（只需一次）</span></li>
+        <li data-step="2"><b>进入服务模式</b><span>关机后按住 <kbd>PLAY</kbd> + <kbd>AF-ON</kbd> 再开机，用 USB 连接电脑</span></li>
+        <li data-step="3"><b>确认连接</b><span>点右上角「刷新」，状态变成绿色「已连接」</span></li>
+        <li data-step="4"><b>选择音频</b><span>把音频文件拖进下面的框，或用「选择文件」</span></li>
+        <li data-step="5"><b>写入相机</b><span>点「写入对焦音效」，等待进度完成（约每 1000 采样点 2 秒）</span></li>
+        <li data-step="6"><b>热重启并试听</b><span>电源键关机再开机（<b>不要拔电池</b>），半按快门听对焦音</span></li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>音效文件</h2>
+        <span id="fileMeta" class="hint">未选择</span>
+      </div>
+
+      <div id="drop" class="drop">
+        <div class="drop-icon">🎵</div>
+        <div class="drop-main">把音频文件拖到这里</div>
+        <div class="drop-sub">支持 wav / mp3 / m4a / flac / ogg，会自动转成 44100Hz 单声道</div>
+        <button id="btnPick" class="primary">选择文件</button>
+      </div>
+
+      <div id="previewBox" class="preview hidden">
+        <div class="preview-info">
+          <span id="fileName" class="file-name"></span>
+          <span id="fileDur" class="file-dur"></span>
+        </div>
+        <audio id="player" controls></audio>
+        <div class="preview-note" id="trimNote"></div>
+      </div>
+
+      <div class="actions">
+        <button id="btnApply" class="primary big" disabled>写入对焦音效</button>
+        <button id="btnRestore" class="ghost">恢复原厂对焦音</button>
+      </div>
+
+      <div id="progressWrap" class="progress-wrap hidden">
+        <div class="progress"><div id="progressBar" class="progress-bar"></div></div>
+        <div id="progressText" class="progress-text">准备中…</div>
+      </div>
+
+      <div id="result" class="result hidden"></div>
+    </section>
+
+    <section class="card muted">
+      <h2>说明</h2>
+      <ul class="notes">
+        <li>修改只发生在相机 RAM 里，<b>不写 flash</b>，不会变砖。</li>
+        <li>补丁在电源键重启后仍然有效；<b>拔电池或恢复出厂后消失</b>。</li>
+        <li>音效长度限制 3 秒以内；写入时间约为采样点数 × 0.002 秒。</li>
+        <li>如果刷新后显示未连接：确认相机在服务模式（USB 显示为 <code>04DA:2370</code>），并已用 Zadig 绑定 WinUSB。</li>
+      </ul>
+      <div class="envline">
+        <span>Python：</span><code id="pyPath">检测中…</code>
+        <button id="btnPython" class="link">更换</button>
+      </div>
+    </section>
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -175,5 +175,18 @@ class SlotTests(unittest.TestCase):
                              focus.encode_header(index, 2))
 
 
+class StatusErrorTest(unittest.TestCase):
+    def test_status_reports_why_the_device_could_not_be_opened(self):
+        def refuse(**_kwargs):
+            raise SystemExit("CreateFile failed for every 04DA:2370 instance")
+        out = io.StringIO()
+        with patch.object(focus, "protocol", return_value=types.SimpleNamespace(Service=refuse)), \
+                contextlib.redirect_stdout(out):
+            focus.cmd_status()
+        result = json.loads(out.getvalue().strip().splitlines()[-1])
+        self.assertFalse(result["connected"])
+        self.assertIn("CreateFile failed", result["error"])
+
+
 if __name__ == '__main__':
     unittest.main()

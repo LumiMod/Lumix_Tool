@@ -110,8 +110,8 @@ def guard_region(svc, idx):
 def cmd_status():
     try:
         svc = protocol().Service(settle=0.002)
-    except SystemExit:
-        print(json.dumps({"connected": False}))
+    except SystemExit as exc:
+        print(json.dumps({"connected": False, "error": str(exc)}))
         return
     try:
         e = read_bytes(svc, ID1, 32)

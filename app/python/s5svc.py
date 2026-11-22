@@ -111,43 +111,68 @@ def err(msg):
     return "%s (GetLastError=%d)" % (msg, ctypes.get_last_error())
 
 
-def find_device_path():
-    """Build the WinUSB device interface path from the USB enum registry key."""
-    root = r"SYSTEM\CurrentControlSet\Enum\USB\VID_%04X&PID_%04X" % (VID, PID)
-    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, root) as k:
-        n = 0
-        instances = []
-        while True:
-            try:
-                instances.append(winreg.EnumKey(k, n))
-            except OSError:
-                break
-            n += 1
-    if not instances:
-        raise SystemExit("no %04X:%04X instance in registry" % (VID, PID))
-    inst = instances[0]
-    guid = GUID_USB_DEVICE
+def _instance_paths(key_name):
+    """Yield interface paths for every registry instance of one hardware key.
+
+    Windows keeps one instance per USB port the camera was ever plugged into,
+    so the first entry may be a stale, disconnected one.
+    """
+    root = r"SYSTEM\CurrentControlSet\Enum\USB" + "\\" + key_name
     try:
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
-                            root + "\\" + inst + r"\Device Parameters") as k:
-            v, _ = winreg.QueryValueEx(k, "DeviceInterfaceGUIDs")
-            if v:
-                guid = v[0]
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, root) as k:
+            instances = []
+            n = 0
+            while True:
+                try:
+                    instances.append(winreg.EnumKey(k, n))
+                except OSError:
+                    break
+                n += 1
     except OSError:
-        pass
-    return r"\\?\USB#VID_%04X&PID_%04X#%s#%s" % (VID, PID, inst, guid)
+        return
+    for inst in instances:
+        guid = GUID_USB_DEVICE
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                root + "\\" + inst + r"\Device Parameters") as k:
+                v, _ = winreg.QueryValueEx(k, "DeviceInterfaceGUIDs")
+                if v:
+                    guid = v[0]
+        except OSError:
+            pass
+        yield r"\\?\USB#%s#%s#%s" % (key_name, inst, guid)
+
+
+def find_device_paths():
+    """All candidate WinUSB interface paths (plain and composite MI_00)."""
+    base = "VID_%04X&PID_%04X" % (VID, PID)
+    paths = list(_instance_paths(base)) + list(_instance_paths(base + "&MI_00"))
+    if not paths:
+        raise SystemExit("no %04X:%04X instance in registry - camera never seen in service mode?" % (VID, PID))
+    return paths
+
+
+def find_device_path():
+    return find_device_paths()[0]
 
 
 class Service:
     def __init__(self, settle=SETTLE_S):
-        path = find_device_path()
-        print("device path:", path)
         self.settle = settle
-        self.file = CreateFileW(path, GENERIC_READ | GENERIC_WRITE,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE, None,
-                                OPEN_EXISTING, FILE_FLAG_OVERLAPPED, None)
-        if self.file == INVALID_HANDLE_VALUE or not self.file:
-            raise SystemExit(err("CreateFile failed - is WinUSB bound to 04DA:2370?"))
+        self.file = None
+        failures = []
+        for path in find_device_paths():
+            handle = CreateFileW(path, GENERIC_READ | GENERIC_WRITE,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE, None,
+                                 OPEN_EXISTING, FILE_FLAG_OVERLAPPED, None)
+            if handle and handle != INVALID_HANDLE_VALUE:
+                print("device path:", path)
+                self.file = handle
+                break
+            failures.append(err(path))
+        if not self.file:
+            raise SystemExit("CreateFile failed for every 04DA:2370 instance - camera unplugged, "
+                             "not in service mode, or WinUSB not bound: " + "; ".join(failures))
         self.usb = ctypes.c_void_p()
         if not WinUsb_Initialize(self.file, ctypes.byref(self.usb)):
             raise SystemExit(err("WinUsb_Initialize failed - wrong driver on the interface?"))

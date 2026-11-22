@@ -122,36 +122,34 @@ bl   0x868E59A0         ; 日志分发（参数 r1 = 消息 ID）
 它紧邻 `CFS_Open(%s)` 等日志串，很可能是 **CFS_Open 的包装/实现之一**。
 下一步可以反汇编它的调用者（BL 到 0x877AAAA0）来确认参数语义。
 
-## 8. CFS 操作分发器（新发现）
+## 8. CFS 操作分发器（已完整解码）
 
-`0x877AADE0` 处是一个 **TBB 跳转表分发器**，按操作码 `r6`（0..0xB）分发：
+`0x877AADE0` 处是一个 **TBB 跳转表分发器**，按操作码 `r6`（0..0xB）分发。
+完整解码后，这些操作全部是**存储 IO / 流操作**，不是 open/read/close：
 
-```asm
-877aade2  cmp   r6, #0xc
-877aadee  tbb   [pc, r6]
-877aae20  ldrd  r1, r2, [r4, #0x14]
-877aae26  bl    #0x877aaaa0      ; 操作 4
-```
+| 操作码 | 函数 | 语义（由 adr 引用的日志串确定） | 系统调用 |
+|---|---|---|---|
+| 0 | 0x877AAD80 | `CFS_SyncEx(CFS_SYNC_FSDATA, ...)` | 0x868E5970 |
+| 1 | 0x877AAD1A | `CFS_GetWriteUnit` + `SyncEx` | 0x868E5958, 0x868E5970 |
+| 2 | 0x877AACB2 | `CFS_SetFinalizeBuf` | 0x868E5958, 0x868E5970 |
+| 3 | 0x877AAB12 | `CFS_GetFa` / `SetFa`（TRUE/FALSE） | — |
+| 4 | 0x877AAAA0 | `CFS_Ioctl(SET_AVREADBUF)` | 0x868E59A0 |
+| 5 | 0x877AAA72 | `CFS_Ioctl(SET_AVREADBUF)` | 0x868E59A0 |
+| 6 | 0x877AAA48 | `CFS_Ioctl(SET_AVREADBUF)` | 0x868E59A0 |
+| 7 | 0x877AA8C2 | `CFS_Ioctl(HDD_ACTIVE/BLOCK_WRITE)` | 0x868E59A0, 0x868E597C |
+| 8 | 0x877AA83A | `CFS_Ioctl(IOC_HDD_TEMPERATURE)` | 0x868E59A0, 0x868E597C |
+| 9–11 | inline | 返回码处理（`CFS_??? Ret`） | — |
 
-各操作函数及它们调用的系统调用桩（`0x868E59xx` 表）：
+> **更正上一轮的推测**：`0x877AAAA0` 不是 CFS_Open，而是 `Ioctl(SET_AVREADBUF)`。
 
-| 操作函数 | 调用的桩 | 备注 |
-|---|---|---|
-| 0x877AA83A | 日志桩 | |
-| 0x877AA8C2 | 0x868E597C + 日志 | |
-| 0x877AAA48 | 日志桩 | |
-| 0x877AAA72 | 日志桩 | |
-| 0x877AAAA0 | 日志桩（消息 ID 0xC040） | 紧邻 `CFS_Open(%s)`，疑为 Open |
-| 0x877AAB12 | 内部调用为主 | 字符串 `CFS_Open(%s)` 位于其体内 |
-| 0x877AACB2 | 0x868E5958 | |
-| 0x877AAD1A | 0x868E5958 + 0x868E5970 | |
-| 0x877AAD80 | 0x868E5970 | |
+### CFS_Open / CFS_Read 的字符串为何找不到引用
 
-对应桩的目标：`0x868E5958 → 0x864D38FA`，`0x868E5970 → 0x864D43F8`，
-`0x868E597C → 0x864D41FE`。
+- `CFS_SyncEx`、`CFS_GetWriteUnit` 等字符串**有** `adr` 引用（可直接定位函数）
+- `CFS_Open(%s)`、`CFS_Read`、`CFS_GetFileSize` **没有**字面量/ADR/movw-movt 引用
+- 全 postboot3 CFS 代码区（0x877A8000–0x877DC000，212KB）扫描无命中
 
-**意义**：payload 可以绕过 CFS 包装，直接调用这些桩完成文件操作；下一步只需确定
-open/read/write/close 与桩/操作的对应关系。
+说明 open/read 这一类走的是**另一套日志机制**（消息 ID 查表），与前一类不同。
+要拿到它们，仍需要恢复消息表，或改从调用方（媒体模块/更新器）反推。
 
 ## 9. 下一步
 

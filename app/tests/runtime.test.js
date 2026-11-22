@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { PassThrough } = require('node:stream');
 const { Runtime, lineReader, parseResult } = require('../runtime');
+const { START, END } = require('../memory.mjs');
 
 function fixture(t, options = {}) {
   const directory = fs.mkdtempSync(path.join(__dirname, '.runtime-'));
@@ -56,7 +57,7 @@ test('mock defaults to a connected camera and exposes every connection scenario 
   const runtime = new Runtime(options);
   runtime.findPython = () => { throw new Error('mock must not search for Python'); };
   runtime.run = () => { throw new Error('mock must not spawn Python'); };
-  assert.deepEqual(await runtime.status(), { connected: true, model: 'DC-S5', body_version: '0x0208', custom: false });
+  assert.deepEqual(await runtime.status(), { connected: true, model: 'DC-S5', body_version: '0x0290', custom: false, verified: true, table_problem: null });
   assert.equal((await runtime.environment()).python, 'Mock · 无需 Python');
   runtime.configureMock({ scenario: 'disconnected' });
   assert.deepEqual(await runtime.status(), { connected: false });
@@ -83,7 +84,7 @@ test('first mock apply scans then writes, restore emits progress, and failure is
   assert.equal(progress.at(-1).done, 441);
   assert.equal(progress.at(-1).overallDone, 441);
   const scan = progress.filter(event => event.phase === 'scan');
-  assert.equal(scan.at(-1).done, 8192);
+  assert.equal(scan.at(-1).done, (END - START) / 1024);
   assert.equal((await runtime.status()).custom, true);
   progress.length = 0;
   assert.deepEqual(await runtime.restore(), { ok: true });

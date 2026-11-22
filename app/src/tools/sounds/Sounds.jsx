@@ -33,6 +33,8 @@ export default function Sounds({ device, active, navigate }) {
   const playbackContext = useRef(null);
   const previewEpoch = useRef(0);
   const disabled = locked || loading || picking || !!action;
+  // The backend refuses writes on firmware/tables it has not verified; mirror it here.
+  const firmwareBlocked = device.device?.connected && device.device?.verified === false;
 
   const stopPreview = useCallback(() => {
     previewEpoch.current++;
@@ -125,7 +127,9 @@ export default function Sounds({ device, active, navigate }) {
       const succeeded = response.succeeded || [];
       const errorText = response.error === 'region not free'
         ? '目标 RAM 区域已被占用，内存扫描缓存可能已过期；本项未写入，请重新扫描内存后再试。'
-        : response.error;
+        : /^(unsupported firmware|sound table check failed)/.test(response.error || '')
+          ? `这台相机的固件或音效表与已验证的不一致，已拒绝写入，相机未被修改。（${response.error}）`
+          : response.error;
       const text = [
         response.ok ? '音效表已通过校验。' : `${errorText || '后端校验未通过。'}${response.address ? `（地址 ${response.address}）` : ''}`,
         response.failedIndex != null ? `失败编号：#${response.failedIndex}；已停止后续操作。` : '',
@@ -170,7 +174,9 @@ export default function Sounds({ device, active, navigate }) {
 
   const percent = progress ? Math.min(100, Math.max(0, Math.round(progress.done / progress.total * 100))) : 0;
   return <Space orientation="vertical" size="large" className="full-width">
-    <SoundTable device={device} disabled={disabled} selected={selected} onSelect={setSelected}
+    {firmwareBlocked && <Alert id="firmwareBlocked" showIcon type="warning" title={`固件未经验证（机身版本 ${device.device.body_version || '未知'}），已禁用写入和恢复`}
+      description={<>音效表地址、暂存区地址都是在松下 DC-S5 v2.9 固件（机身版本 0x0290）上实测确定的。其它固件上这些地址可能存放着别的数据，写入可能导致相机异常，因此只开放查看和内存扫描。{device.device.table_problem ? `音效表检查：${device.device.table_problem}。` : ''}</>} />}
+    <SoundTable device={device} disabled={disabled} writeBlocked={firmwareBlocked} selected={selected} onSelect={setSelected}
       onReplace={index => { setSelected([index]); setResult(null); actionCard.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }}
       onRestore={confirmRestore} />
     <div ref={actionCard} className="action-card"><Row gutter={[20, 20]}>
@@ -240,7 +246,7 @@ export default function Sounds({ device, active, navigate }) {
           <Paragraph><Button type="link" style={{ padding: 0 }} onClick={() => navigate?.('memory')}>查看内存诊断</Button></Paragraph>
           {map && <Paragraph type="secondary">地址为当前计划，写入前会重新读取声表并检查目标字节。</Paragraph>}
           {estimatedSeconds > 120 && <Alert id="timeWarning" className="page-notice" type="warning" showIcon title="预计操作超过 2 分钟" description="服务模式空闲约 4–7 分钟可能自动关机。请轻点相机触摸屏保持唤醒，并保持 USB 与电源连接。" />}
-          <Button id="applyAudio" type="primary" size="large" block icon={<CloudUploadOutlined />} disabled={disabled || !ready || !audio || !selected.length} loading={action === 'apply'} onClick={() => perform('apply')}>写入所选音效（{selected.length} 项）</Button>
+          <Button id="applyAudio" type="primary" size="large" block icon={<CloudUploadOutlined />} disabled={disabled || firmwareBlocked || !ready || !audio || !selected.length} loading={action === 'apply'} onClick={() => perform('apply')}>写入所选音效（{selected.length} 项）</Button>
           <Paragraph type="secondary" style={{ margin: '12px 0 0' }}>{action ? '操作中，请保持连接' : device.checking ? '正在检查相机连接' : !ready ? '连接相机后即可写入' : !audio ? '选择音频，开始准备' : '准备就绪，写入后需热重启'}</Paragraph>
         </Card>
         <Card title="使用提示" size="small"><Paragraph>仅修改 <Text strong>RAM</Text>，不写入 flash。电源键重启后保留，拔电池或恢复出厂后失效。</Paragraph><Text type="secondary">写入期间保持 USB 与电源连接。根据扫描分配独立 RAM 空间，整个批次先分配、再逐项检查并写入。完成后用电源键热重启，再触发对应动作试听。</Text></Card>

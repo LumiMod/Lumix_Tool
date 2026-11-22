@@ -1,4 +1,11 @@
-export const SCRATCH_VIRTUAL = 0x0F000000;
+import { START, END } from '../../../memory.mjs';
+
+// Current scratch RAM (virtual addresses) plus the 0x8F000000 range that
+// v0.2.0/v0.3.0 wrote to: entries patched by those builds stay replaced until
+// the battery is pulled.
+export const SCRATCH_VIRTUAL = START - 0x80000000;
+const SCRATCH_RANGES = [[SCRATCH_VIRTUAL, END - 0x80000000], [0x0F000000, 0x0F800000]];
+const inScratch = addr => SCRATCH_RANGES.some(([start, end]) => addr >= start && addr < end);
 
 export function originalSamples(hex) {
   if (typeof hex !== 'string' || !/^[0-9a-f]{64}$/i.test(hex)) return null;
@@ -9,6 +16,6 @@ export function originalSamples(hex) {
 
 export function slotState(entry, original) {
   if (!entry?.hex) return '未知';
-  if (Number(entry.addr) >= SCRATCH_VIRTUAL && Number(entry.addr) < 0x0F800000) return '已替换';
+  if (inScratch(Number(entry.addr))) return '已替换';
   return original && entry.hex.toLowerCase() === original.toLowerCase() ? '原厂' : '未知';
 }

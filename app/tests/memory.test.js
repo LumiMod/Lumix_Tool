@@ -6,7 +6,7 @@ const path = require('node:path');
 const { Runtime } = require('../runtime');
 const { START, END, liveRegions, memoryStats, planAllocation, markRange, mockMemoryMap, validMap } = require('../memory.mjs');
 
-const scanned = (map = mockMemoryMap(), bodyVersion = '0x0208') => ({ ...map, bodyVersion, scannedAt: '2026-11-22T00:00:00.000Z' });
+const scanned = (map = mockMemoryMap(), bodyVersion = '0x0290') => ({ ...map, bodyVersion, scannedAt: '2026-11-22T00:00:00.000Z' });
 const owned = (index, start, samples) => ({ index, addr: start + 16 - 0x80000000, size: samples });
 function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lumixtool-memory-'));
@@ -20,7 +20,7 @@ function fixture(t) {
 
 test('malformed or incomplete caches require a scan and cannot drive allocation', () => {
   for (const map of [null, { ...mockMemoryMap(), runs: [null] },
-    { ...mockMemoryMap(), runs: mockMemoryMap().runs.slice(1) }, { ...mockMemoryMap(), start: '0x8F000001' }]) {
+    { ...mockMemoryMap(), runs: mockMemoryMap().runs.slice(1) }, { ...mockMemoryMap(), start: '0x8B5B0001' }]) {
     assert.equal(validMap(map), false);
     assert.equal(planAllocation(map, [], [1], 100).needsScan, true);
   }
@@ -40,14 +40,18 @@ test('reuse uses dump ownership, rounded capacity and the same start', () => {
   assert.equal(moved.allocations[0].start, START + 3072);
 });
 
-test('first fit avoids data, zero, every other live span and earlier batch allocations', () => {
+test('first fit avoids data, every other live span and earlier batch allocations; zero blocks count as free', () => {
   const map = mockMemoryMap();
   const entries = [owned(2, START, 100), owned(3, START + 2048, 100)];
   const result = planAllocation(map, entries, [1, 4], 500);
   assert.equal(result.ok, true);
   assert.deepEqual(result.allocations.map(item => item.start), [START + 1024, START + 3072]);
-  const largeLive = [owned(2, START, (0x80000 - 16) / 2)];
-  assert.equal(planAllocation(map, largeLive, [1], 100).allocations[0].start, 0x8F0B0000);
+  // Fill the whole first free run: the next fit skips the data run and lands
+  // in the zero-filled run, which counts as free scratch RAM.
+  const [firstFree, dataRun, zeroRun] = map.runs;
+  assert.deepEqual([firstFree.kind, dataRun.kind, zeroRun.kind], ['free-0x55', 'data', 'zero']);
+  const largeLive = [owned(2, START, (Number(firstFree.end) - START - 16) / 2)];
+  assert.equal(planAllocation(map, largeLive, [1], 100).allocations[0].start, Number(zeroRun.start));
   // Legacy unaligned allocations are protected but cannot be reused.
   const legacy = planAllocation(map, [owned(2, START + 256, 500)], [1], 500);
   assert.equal(legacy.allocations[0].start, START + 2048);
@@ -58,20 +62,22 @@ test('first fit avoids data, zero, every other live span and earlier batch alloc
 
 test('live ownership reads the raw table and includes the very first scratch PCM address', () => {
   const raw = Buffer.alloc(32);
-  raw.writeUInt32LE(0x0F000010, 4); raw.writeUInt32LE(600, 0x14);
+  raw.writeUInt32LE(0x0B5B0010, 4); raw.writeUInt32LE(600, 0x14);
   const live = liveRegions([{ index: 1, addr: 0, size: 0, hex: raw.toString('hex') }]);
   assert.equal(live[0].start, START);
   assert.equal(live[0].capacity, 2048);
   assert.equal(liveRegions([{ index: 2, addr: 0x0F800000, size: 10 }]).length, 0);
   const stats = memoryStats(mockMemoryMap(), [owned(1, START, 100), owned(2, START, 100)]);
   assert.equal(stats.used, 1024);
-  assert.equal(stats.totalFree, 0x3D0000 - 1024);
+  const freeBytes = mockMemoryMap().runs.filter(run => run.kind === 'free-0x55' || run.kind === 'zero')
+    .reduce((sum, run) => sum + Number(run.end) - Number(run.start), 0);
+  assert.equal(stats.totalFree, freeBytes - 1024);
 });
 
 test('batch insufficient space reports needed, total and largest before any write', async t => {
   const { runtime } = fixture(t);
-  runtime.saveMemoryMap(scanned({ start: '0x8F000000', length: 1024,
-    runs: [{ start: '0x8F000000', end: '0x8F000400', kib: 1, kind: 'free-0x55' }] }));
+  runtime.saveMemoryMap(scanned({ start: '0x8B5B0000', length: 1024,
+    runs: [{ start: '0x8B5B0000', end: '0x8B5B0400', kib: 1, kind: 'free-0x55' }] }));
   let writes = 0;
   runtime.applySlot = () => { writes++; throw new Error('must allocate all before writing'); };
   const result = await runtime.soundBatch('apply', { indices: [1, 2], samples: 400, pcm: new ArrayBuffer(800) });
@@ -86,7 +92,7 @@ test('batch insufficient space reports needed, total and largest before any writ
 });
 
 test('fragmented free space can be insufficient despite enough total bytes', () => {
-  let map = { start: '0x8F000000', length: 4096, runs: [{ start: '0x8F000000', end: '0x8F001000', kind: 'free-0x55' }] };
+  let map = { start: '0x8B5B0000', length: 4096, runs: [{ start: '0x8B5B0000', end: '0x8B5B1000', kind: 'free-0x55' }] };
   map = markRange(map, START + 1024, START + 3072, 'data');
   const result = planAllocation(map, [], [1], 600);
   assert.equal(result.ok, false);
@@ -101,17 +107,17 @@ test('successful writes update the cache, preserve scan time and are reusable by
   const write = (index, samples) => runtime.soundBatch('apply', { indices: [index], samples, pcm: new ArrayBuffer(samples * 2) });
   assert.equal((await write(1, 100)).ok, true);
   assert.equal((await write(2, 100)).ok, true);
-  assert.equal(runtime.mockEntries[1].addr, '0x0F000010');
-  assert.equal(runtime.mockEntries[2].addr, '0x0F000410');
+  assert.equal(runtime.mockEntries[1].addr, '0x0B5B0010');
+  assert.equal(runtime.mockEntries[2].addr, '0x0B5B0410');
   assert.equal((await write(1, 400)).ok, true);
-  assert.equal(runtime.mockEntries[1].addr, '0x0F000010');
-  const map = runtime.memoryMap('0x0208').map;
+  assert.equal(runtime.mockEntries[1].addr, '0x0B5B0010');
+  const map = runtime.memoryMap('0x0290').map;
   assert.equal(map.runs[0].kind, 'lumixtool');
   assert.equal(map.runs[0].kib, 2);
   assert.equal(map.scannedAt, '2026-11-22T00:00:00.000Z');
-  assert.equal(runtime.memoryMap('0x0290').map, null);
+  assert.equal(runtime.memoryMap('0x0280').map, null);
   const restarted = new Runtime({ configPath: runtime.configPath, legacyConfigPath: runtime.legacyConfigPath, mock: true });
-  assert.deepEqual(restarted.memoryMap('0x0208').map, map);
+  assert.deepEqual(restarted.memoryMap('0x0290').map, map);
 });
 
 test('stale guard refusal marks the entire allocation data, stops the batch and never retries', async t => {
@@ -125,11 +131,11 @@ test('stale guard refusal marks the entire allocation data, stops the batch and 
   const result = await runtime.soundBatch('apply', { indices: [1, 2], samples: 600, pcm: new ArrayBuffer(1200) });
   assert.equal(result.rescan, true);
   assert.equal(result.code, 'stale-map');
-  assert.equal(result.address, '0x8F000000');
+  assert.equal(result.address, '0x8B5B0000');
   assert.match(result.error, /未写入.*重新扫描/);
   assert.equal(calls, 1);
   assert.deepEqual(runtime.mockEntries.map(entry => entry.hex), before);
-  const map = runtime.memoryMap('0x0208').map;
+  const map = runtime.memoryMap('0x0290').map;
   assert.equal(map.runs[0].kind, 'data');
   assert.equal(map.runs[0].kib, 2);
   assert.equal(planAllocation(map, runtime.mockEntries, [2], 600).allocations[0].start, START + 2048);
@@ -147,8 +153,8 @@ test('a later guard failure preserves earlier success and stops all remaining wr
   assert.deepEqual(result.succeeded, [1]);
   assert.equal(result.failedIndex, 2);
   assert.deepEqual(result.pending, [3]);
-  assert.equal(runtime.memoryMap('0x0208').map.runs[0].kind, 'lumixtool');
-  assert.equal(runtime.memoryMap('0x0208').map.runs[1].kind, 'data');
+  assert.equal(runtime.memoryMap('0x0290').map.runs[0].kind, 'lumixtool');
+  assert.equal(runtime.memoryMap('0x0290').map.runs[1].kind, 'data');
 });
 
 test('mock scan is read-only, takes about 3 seconds, emits a scan phase and caches by body version', async t => {
@@ -162,9 +168,9 @@ test('mock scan is read-only, takes about 3 seconds, emits a scan phase and cach
   assert.equal(runtime.mockRam.equals(before), true);
   assert.deepEqual(result.map.runs, mockMemoryMap().runs);
   assert.ok(events.every(event => event.phase === 'scan'));
-  assert.equal(events.at(-1).done, 8192);
-  assert.equal(events.at(-1).total, 8192);
-  assert.equal(result.map.bodyVersion, '0x0208');
+  assert.equal(events.at(-1).done, (END - START) / 1024);
+  assert.equal(events.at(-1).total, (END - START) / 1024);
+  assert.equal(result.map.bodyVersion, '0x0290');
   assert.ok(!Number.isNaN(Date.parse(result.map.scannedAt)));
   assert.equal(validMap(result.map), true);
   assert.equal(Number(result.map.start) + result.map.length, END);
@@ -183,13 +189,13 @@ test('live writes scan first when this body has no map and pass an explicit addr
     if (args[0] === 'dump') return { ok: true, entries: stock };
     if (args[0] === 'scan') { runtime.emitProgress({ done: 8192, total: 8192 }); return { ok: true, ...mockMemoryMap() }; }
     assert.equal(args[0], 'apply-slot');
-    assert.equal(args[4], '0x8F000000');
+    assert.equal(args[4], '0x8B5B0000');
     assert.equal(fs.readFileSync(args[2]).length, 200);
     return { ok: true };
   };
   assert.equal((await runtime.soundBatch('apply', { indices: [1], samples: 100, pcm: new ArrayBuffer(200) })).ok, true);
   assert.ok(calls.indexOf('scan') < calls.indexOf('apply-slot'));
   assert.ok(events.some(event => event.phase === 'scan'));
-  assert.equal(runtime.memoryMap('0x0208').map, null);
+  assert.equal(runtime.memoryMap('0x0280').map, null);
   assert.equal(runtime.memoryMap('0x0290').map.runs[0].kind, 'lumixtool');
 });

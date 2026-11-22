@@ -96,7 +96,7 @@ class Runtime {
 
   async dump() {
     if (this.mock) {
-      if (!['connected', 'region-not-free'].includes(this.mockState.scenario)) return { ok: false, error: '模拟设备未就绪。' };
+      if (!['connected', 'region-not-free', 'unverified'].includes(this.mockState.scenario)) return { ok: false, error: '模拟设备未就绪。' };
       return { ok: true, entries: this.mockEntries.map(entry => ({ ...entry })) };
     }
     if (this.platform !== 'win32') return { ok: false, error: '实机读取需要 Windows WinUSB 环境。' };
@@ -279,7 +279,8 @@ class Runtime {
       if (scenario === 'disconnected') return { connected: false };
       if (!this.driver.mockStatus().ok) return { connected: false };
       if (scenario === 'error') return { connected: true, error: '模拟 USB 读取失败：设备被其他程序占用。' };
-      return { connected: true, model: 'DC-S5', body_version: '0x0208', custom };
+      if (scenario === 'unverified') return { connected: true, model: 'DC-S5', body_version: '0x0280', custom, verified: false, table_problem: null };
+      return { connected: true, model: 'DC-S5', body_version: '0x0290', custom, verified: true, table_problem: null };
     }
     if (!await this.findPython()) return { connected: false, pythonMissing: true, error: '未找到 Python 3，请在设置中指定路径。' };
     // The existing backend imports winreg/WinUSB. Do not run it on macOS/Linux.
@@ -289,7 +290,7 @@ class Runtime {
 
   configureMock(options = {}) {
     if (!this.mock) return { ok: false, error: '模拟模式未启用。' };
-    if (['connected', 'disconnected', 'error', 'python-missing', 'region-not-free'].includes(options.scenario)) {
+    if (['connected', 'disconnected', 'error', 'python-missing', 'region-not-free', 'unverified'].includes(options.scenario)) {
       this.mockState.scenario = options.scenario;
       this.mockState.staleNext = options.scenario === 'region-not-free';
     }
@@ -304,6 +305,7 @@ class Runtime {
   uninstallDriver(options) { return this.driver.change('uninstall', options); }
 
   async mockOperation(kind, total) {
+    if (this.mockState.scenario === 'unverified') return { ok: false, error: 'unsupported firmware: body version 0x0280 has not been verified (verified: 0x0290); writing is disabled' };
     if (!['connected', 'region-not-free'].includes(this.mockState.scenario)) return { ok: false, error: '模拟设备未就绪，请先连接设备。' };
     const failure = this.mockState.failNext;
     this.mockState.failNext = false;
@@ -337,6 +339,7 @@ class Runtime {
     const addr = payload.regionAddr;
     if (!Number.isInteger(addr) || addr % BLOCK || addr < START || addr + 16 + pcm.length > END) throw new Error('写入地址必须按 1 KiB 对齐，且完整位于 RAM 暂存区。');
     if (this.mock) {
+      if (this.mockState.scenario === 'unverified') return { ok: false, error: 'unsupported firmware: body version 0x0280 has not been verified (verified: 0x0290); writing is disabled' };
       if (this.mockState.staleNext) {
         this.mockState.staleNext = false;
         this.mockRam[addr - START] = 0xA7;

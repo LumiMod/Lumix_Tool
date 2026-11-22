@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Card, Descriptions, Empty, Flex, Progress, Space, Table, Tag, Tooltip, Typography, theme } from 'antd';
 import { DownloadOutlined, ScanOutlined } from '@ant-design/icons';
-import { BLOCK, KINDS, hexAddress, liveRegions, markRange, memoryStats } from '../../../memory.mjs';
+import { BLOCK, END, KINDS, START, hexAddress, liveRegions, markRange, memoryStats } from '../../../memory.mjs';
 
 const { Text, Paragraph } = Typography;
 const names = { 'free-0x55': '空闲（0x55）', lumixtool: 'LumixTool', data: '其他数据', zero: '全零' };
@@ -56,7 +56,7 @@ export default function Memory({ device }) {
       ]} />
       {scanning && <div role="status"><Text>正在只读扫描 RAM…</Text><Progress percent={Math.min(100, Math.round(progress.done / progress.total * 100))} status="active" /><Text type="secondary">{progress.done.toLocaleString()} / {progress.total.toLocaleString()} KiB</Text></div>}
       {feedback && <Alert className="page-notice" showIcon type={feedback.ok ? 'success' : 'error'} title={feedback.text} />}
-      {!map && <Paragraph type="secondary">扫描范围 0x8F000000–0x8F800000（8 MiB）。模拟扫描约 3 秒，实机扫描预计约 20 秒，实际以进度为准。</Paragraph>}
+      {!map && <Paragraph type="secondary">扫描范围 {hexAddress(START)}–{hexAddress(END)}（{((END - START) / 1048576).toFixed(2)} MiB）。模拟扫描约 3 秒，实机扫描时间以进度为准。</Paragraph>}
     </Card>
     <Card title="空间概览">
       <Descriptions column={{ xs: 1, sm: 2, xl: 3 }} items={[

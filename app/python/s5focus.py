@@ -117,6 +117,61 @@ def guard_region(svc, idx, samples, addr):
     return addr
 
 
+# Every address used here (sound table, body-version field, scratch RAM) was
+# verified on DC-S5 firmware 2.90 only. Other firmware may keep something else
+# at these addresses, so writes are refused unless the body version is listed.
+VERSION_ADDR = 0x863B0000
+VERIFIED_BODY_VERSIONS = {0x0290}
+PROGRAM_VIRT = (0x06280000, 0x07280000)   # program image, 16 MiB at 0x86280000
+LEGACY_SCRATCH_VIRT = (0x0F000000, 0x0F800000)  # written by LumixTool 0.2.0/0.3.0
+MAX_TABLE_SAMPLES = 0x100000
+
+
+class UnsupportedFirmware(RuntimeError):
+    pass
+
+
+def read_body_version(svc):
+    return struct.unpack_from("<H", read_bytes(svc, VERSION_ADDR, 2), 0)[0]
+
+
+def entry_problem(raw, idx):
+    """Why a 32-byte sound-table entry does not look like entry idx (None if it does)."""
+    entry_id, addr = struct.unpack_from("<II", raw, 0)
+    samples = struct.unpack_from("<I", raw, 0x14)[0]
+    if entry_id != idx:
+        return "entry %d has id %d" % (idx, entry_id)
+    if not 0 < samples <= MAX_TABLE_SAMPLES:
+        return "entry %d has implausible sample count %d" % (idx, samples)
+    ranges = (PROGRAM_VIRT, LEGACY_SCRATCH_VIRT,
+              (SCRATCH_START - 0x80000000, SCRATCH_END - 0x80000000))
+    if not any(lo <= addr < hi for lo, hi in ranges):
+        return "entry %d points at unexpected address 0x%08X" % (idx, addr)
+    return None
+
+
+def table_problem(raw):
+    for i in range(SLOT_COUNT):
+        problem = entry_problem(raw[i * 32:(i + 1) * 32], i)
+        if problem:
+            return problem
+    return None
+
+
+def require_writable(svc):
+    """Refuse to write unless the firmware and the sound table are the verified ones."""
+    ver = read_body_version(svc)
+    if ver not in VERIFIED_BODY_VERSIONS:
+        raise UnsupportedFirmware(
+            "unsupported firmware: body version 0x%04X has not been verified "
+            "(verified: %s); writing is disabled" % (
+                ver, ", ".join("0x%04X" % v for v in sorted(VERIFIED_BODY_VERSIONS))))
+    problem = table_problem(read_bytes(svc, TBL, SLOT_COUNT * 32))
+    if problem:
+        raise UnsupportedFirmware("sound table check failed: %s; writing is disabled" % problem)
+    return ver
+
+
 def cmd_status():
     try:
         svc = protocol().Service(settle=0.002)
@@ -127,8 +182,11 @@ def cmd_status():
         e = read_bytes(svc, ID1, 32)
         addr = struct.unpack_from("<I", e, 4)[0]
         size = struct.unpack_from("<I", e, 0x14)[0]
-        ver = struct.unpack_from("<H", read_bytes(svc, 0x863B0000, 2), 0)[0]
+        ver = read_body_version(svc)
+        problem = table_problem(read_bytes(svc, TBL, SLOT_COUNT * 32))
         print(json.dumps({
+            "verified": ver in VERIFIED_BODY_VERSIONS and problem is None,
+            "table_problem": problem,
             "connected": True,
             "id1_addr": "0x%08X" % addr,
             "id1_bytes": size,
@@ -202,6 +260,7 @@ def cmd_apply(path, samples, idx, region_addr):
         raise RuntimeError("PCM size mismatch")
     svc = protocol().Service(settle=0.002)
     try:
+        require_writable(svc)
         pcm_virt = write_pcm(svc, path, samples, idx, region_addr)
         e = retarget(svc, idx, samples, pcm_virt)
         ok = (struct.unpack_from("<I", e, 4)[0] == pcm_virt
@@ -215,6 +274,7 @@ def cmd_apply(path, samples, idx, region_addr):
 def cmd_restore():
     svc = protocol().Service(settle=0.002)
     try:
+        require_writable(svc)
         for i in range(0, 32, 2):
             svc.exchange_write(protocol().build_0x9c(ID1 + i,
                                             struct.unpack_from("<H", ORIG_ID1, i)[0]))
@@ -229,8 +289,12 @@ def cmd_restore_id(idx, hexblob):
     raw = bytes.fromhex(hexblob)
     if len(raw) != 32:
         raise SystemExit("entry hex must be 32 bytes")
+    problem = entry_problem(raw, idx)
+    if problem or not PROGRAM_VIRT[0] <= struct.unpack_from("<I", raw, 4)[0] < PROGRAM_VIRT[1]:
+        raise ValueError("refusing to restore: %s" % (problem or "saved entry does not point into the firmware program image"))
     svc = protocol().Service(settle=0.002)
     try:
+        require_writable(svc)
         base = entry_addr(idx)
         for i in range(0, 32, 2):
             svc.exchange_write(protocol().build_0x9c(base + i,

@@ -256,7 +256,7 @@ test('memory scan holds the shared device lock and forwards scan progress', asyn
 
 test('memory export saves the main-process cached map through a native dialog', async () => {
   const { handlers, runtime, calls } = await launch({ saveResult: { canceled: false, filePath: '/tmp/map.json' } });
-  const map = { bodyVersion: '0x0290', scannedAt: 'now', start: '0x8F000000', length: 1024, runs: [] };
+  const map = { bodyVersion: '0x0290', scannedAt: 'now', start: '0x8B5B0000', length: 1024, runs: [] };
   runtime.memoryMap = version => ({ ok: true, map: version === '0x0290' ? map : null });
   assert.equal((await handlers.get('export-memory')({}, '0x0208')).ok, false);
   assert.equal(calls.length, 0);

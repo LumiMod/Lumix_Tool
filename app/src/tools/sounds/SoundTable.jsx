@@ -4,7 +4,7 @@ import { EditOutlined, UndoOutlined } from '@ant-design/icons';
 import { catalog, soundName } from './catalog';
 import { originalSamples, slotState } from './state.mjs';
 
-export default function SoundTable({ device, disabled, selected, onSelect, onReplace, onRestore }) {
+export default function SoundTable({ device, disabled, writeBlocked = false, selected, onSelect, onReplace, onRestore }) {
   const { modal, message } = App.useApp();
   const [renaming, setRenaming] = useState(false);
   const table = device.device.soundTable;
@@ -33,7 +33,7 @@ export default function SoundTable({ device, disabled, selected, onSelect, onRep
     });
   }
 
-  return <Card title="相机音效 · 28 项" extra={<Button id="restoreAll" icon={<UndoOutlined />} disabled={disabled || renaming || !device.ready || !Object.keys(originals).length} onClick={() => onRestore(null)}>全部恢复</Button>}>
+  return <Card title="相机音效 · 28 项" extra={<Button id="restoreAll" icon={<UndoOutlined />} disabled={disabled || writeBlocked || renaming || !device.ready || !Object.keys(originals).length} onClick={() => onRestore(null)}>全部恢复</Button>}>
     <Space orientation="vertical" size="middle" className="full-width">
       <Typography.Text type="secondary">勾选多个编号可批量写入同一段声音，用于二分定位触发动作。每项独立存放；原始表项与名称按机身版本保存在本机。</Typography.Text>
       {table && !table.ok && <Alert type="error" showIcon title={table.error} />}
@@ -58,7 +58,7 @@ export default function SoundTable({ device, disabled, selected, onSelect, onRep
           } },
           { title: '操作', key: 'actions', width: 140, render: (_, row) => <Space size="small">
             <Button size="small" data-action="replace" disabled={disabled || renaming || !device.ready} onClick={() => onReplace(row.index)}>替换</Button>
-            <Button size="small" data-action="restore" disabled={disabled || renaming || !device.ready || !originals[row.index]} onClick={() => onRestore(row.index)}>恢复</Button>
+            <Button size="small" data-action="restore" disabled={disabled || writeBlocked || renaming || !device.ready || !originals[row.index]} onClick={() => onRestore(row.index)}>恢复</Button>
           </Space> },
         ]} />
       <Typography.Text>已选 {selected.length} 项{selected.length > 0 ? `：${selected.map(index => `#${index}`).join('、')}` : '，请勾选要替换的音效'}</Typography.Text>

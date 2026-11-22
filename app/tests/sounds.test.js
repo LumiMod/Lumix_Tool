@@ -17,14 +17,14 @@ function fixture(t, options = {}) {
   return runtime;
 }
 function fastOperations(runtime) {
-  runtime.saveMemoryMap({ ...mockMemoryMap(), scannedAt: new Date().toISOString(), bodyVersion: '0x0208' });
+  runtime.saveMemoryMap({ ...mockMemoryMap(), scannedAt: new Date().toISOString(), bodyVersion: '0x0290' });
   runtime.mockOperation = async (_kind, total) => {
     runtime.emitProgress({ done: Math.floor(total / 2), total });
     runtime.emitProgress({ done: total, total });
     return { ok: true };
   };
 }
-function patchEntry(runtime, index, address = 0x0F000100) {
+function patchEntry(runtime, index, address = 0x0B5B0100) {
   const entry = runtime.mockEntries[index];
   const raw = Buffer.from(entry.hex, 'hex');
   raw.writeUInt32LE(address, 4);
@@ -45,12 +45,12 @@ test('connect backs up 28 entries by body version; originals and labels survive 
   assert.equal(device.custom, true);
   assert.equal(device.soundTable.originals[1], original);
   assert.notEqual(device.soundTable.entries[1].hex, original);
-  assert.equal(runtime.renameSound({ version: '0x0208', index: 1, label: '我的对焦音' }).ok, true);
+  assert.equal(runtime.renameSound({ version: '0x0290', index: 1, label: '我的对焦音' }).ok, true);
   const restarted = new Runtime({ configPath: runtime.configPath, legacyConfigPath: runtime.legacyConfigPath, mock: true });
   table = (await restarted.inspect()).soundTable;
   assert.equal(table.originals[1], original);
   assert.equal(table.labels[1], '我的对焦音');
-  const other = await runtime.soundTable('0x0290');
+  const other = await runtime.soundTable('0x0280');
   assert.equal(other.originals[1], undefined);
   assert.equal(other.labels[1], undefined);
   assert.equal(Object.keys(other.originals).length, 27);
@@ -61,7 +61,7 @@ test('connect backs up 28 entries by body version; originals and labels survive 
 test('patched legacy/new addresses without originals are neither saved nor individually restored', async t => {
   const runtime = fixture(t);
   patchEntry(runtime, 1);
-  patchEntry(runtime, 27, 0x0F738110);
+  patchEntry(runtime, 27, 0x0BCE8110);
   const table = (await runtime.inspect()).soundTable;
   assert.equal(table.originals[1], undefined);
   assert.equal(table.originals[27], undefined);
@@ -78,9 +78,9 @@ test('batch regions are independent, progress is overall and per-entry, restorat
   fastOperations(runtime);
   const result = await runtime.soundBatch('apply', { indices: [1, 0, 27], pcm: new ArrayBuffer(20), samples: 10 });
   assert.deepEqual(result, { ok: true, succeeded: [1, 0, 27] });
-  assert.equal(runtime.mockEntries[1].addr, '0x0F000010');
-  assert.equal(runtime.mockEntries[0].addr, '0x0F000410');
-  assert.equal(runtime.mockEntries[27].addr, '0x0F000810');
+  assert.equal(runtime.mockEntries[1].addr, '0x0B5B0010');
+  assert.equal(runtime.mockEntries[0].addr, '0x0B5B0410');
+  assert.equal(runtime.mockEntries[27].addr, '0x0B5B0810');
   assert.equal(runtime.mockEntries[1].size, 10);
   assert.ok(events.every(e => e.overallTotal === 30));
   assert.ok(events.every((e, i) => i === 0 || e.overallDone >= events[i - 1].overallDone));
@@ -102,7 +102,7 @@ test('stale map refuses the first allocation and leaves all entries untouched', 
   assert.equal(result.ok, false);
   assert.equal(result.code, 'stale-map');
   assert.match(result.error, /重新扫描内存/);
-  assert.equal(result.address, '0x8F000000');
+  assert.equal(result.address, '0x8B5B0000');
   assert.deepEqual(result.succeeded, []);
   assert.equal(result.failedIndex, 1);
   assert.deepEqual(result.pending, [20, 21]);
@@ -132,7 +132,7 @@ test('invalid batches, changed versions and corrupt backups cause no writes', as
   for (const indices of [[], [28], [-1], [1, 1], ['1'], null]) {
     assert.equal((await runtime.soundBatch('apply', { ...payload, indices })).ok, false);
   }
-  assert.equal((await runtime.soundBatch('apply', { ...payload, indices: [1], version: '0x0290' })).ok, false);
+  assert.equal((await runtime.soundBatch('apply', { ...payload, indices: [1], version: '0x0280' })).ok, false);
   fs.writeFileSync(runtime.soundsPath, 'broken json');
   const result = await runtime.soundBatch('apply', { ...payload, indices: [1] });
   assert.match(result.error, /无法读取音效备份/);
@@ -142,14 +142,14 @@ test('invalid batches, changed versions and corrupt backups cause no writes', as
 
 test('live slot commands preserve arguments and clean PCM temporary files', async t => {
   const runtime = fixture(t, { mock: false, platform: 'win32' });
-  const payload = { index: 20, regionAddr: 0x8F000400, pcm: new Uint8Array([1, 0, 2, 0]), samples: 2 };
+  const payload = { index: 20, regionAddr: 0x8B5B0400, pcm: new Uint8Array([1, 0, 2, 0]), samples: 2 };
   let filename;
   runtime.run = async args => {
     if (args[0] === 'apply-slot') {
       assert.equal(args[1], '20');
       filename = args[2];
       assert.equal(args[3], '2');
-      assert.equal(args[4], '0x8F000400');
+      assert.equal(args[4], '0x8B5B0400');
       assert.deepEqual(fs.readFileSync(filename), Buffer.from(payload.pcm));
     } else assert.deepEqual(args, ['restore-id', '20', stock[20].hex]);
     return { ok: true };
@@ -164,8 +164,25 @@ test('renderer state uses saved duration and recognizes both scratch layouts', a
   assert.equal(originalSamples(stock[1].hex), 14464);
   assert.equal(originalSamples(undefined), null);
   assert.equal(slotState(stock[1], stock[1].hex), '原厂');
-  assert.equal(slotState({ ...stock[1], addr: '0x0F000100' }, undefined), '已替换');
-  assert.equal(slotState({ ...stock[1], addr: '0x0F084110' }, stock[1].hex), '已替换');
+  assert.equal(slotState({ ...stock[1], addr: '0x0B5B0100' }, undefined), '已替换');
+  assert.equal(slotState({ ...stock[1], addr: '0x0B634110' }, stock[1].hex), '已替换');
+  assert.equal(slotState({ ...stock[1], addr: '0x0F000100' }, stock[1].hex), '已替换'); // written by v0.2.0/v0.3.0
   assert.equal(slotState(stock[1], stock[2].hex), '未知');
   assert.equal(slotState({}, undefined), '未知');
+});
+
+test('unverified firmware reports itself and refuses writes without touching the camera', async t => {
+  const runtime = fixture(t);
+  fastOperations(runtime);
+  assert.equal(runtime.configureMock({ scenario: 'unverified' }).ok, true);
+  const status = await runtime.status();
+  assert.equal(status.verified, false);
+  assert.equal(status.body_version, '0x0280');
+  const ram = Buffer.from(runtime.mockRam);
+  const entries = JSON.stringify(runtime.mockEntries);
+  const payload = { indices: [1], samples: 2, pcm: new Uint8Array([1, 0, 2, 0]).buffer };
+  const result = await runtime.soundBatch('apply', { ...payload, version: '0x0280' });
+  assert.equal(result.ok, false);
+  assert.equal(runtime.mockRam.equals(ram), true);
+  assert.equal(JSON.stringify(runtime.mockEntries), entries);
 });

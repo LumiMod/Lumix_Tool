@@ -79,6 +79,7 @@ function MockToolbar({ device }) {
         { value: 'connected', label: '已连接' }, { value: 'disconnected', label: '未连接' },
         { value: 'error', label: '连接异常' }, { value: 'python-missing', label: 'Python 缺失' },
         { value: 'region-not-free', label: '缓存过期（首个区域被占用）' },
+        { value: 'unverified', label: '未验证固件（0x0280）' },
       ]} /><label htmlFor="mockDriver">驱动状态</label><Select id="mockDriver" value={env.mockState.driverScenario} disabled={locked} style={{ width: 170 }}
       onChange={driverScenario => device.configureMock({ driverScenario })} options={[
         { value: 'ok', label: '驱动正常' }, { value: 'absent', label: '无服务模式设备' }, { value: 'normal', label: '普通模式 2382' },

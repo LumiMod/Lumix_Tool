@@ -1,4 +1,21 @@
+const fs0 = require('fs');
+const os0 = require('os');
+const path0 = require('path');
+const LOG = path0.join(os0.tmpdir(), 's5focus_startup.log');
+function logLine(s) {
+  try { fs0.appendFileSync(LOG, new Date().toISOString() + ' ' + s + '\n'); } catch (e) {}
+}
+logLine('--- boot ---');
+logLine('ELECTRON_RUN_AS_NODE=' + process.env.ELECTRON_RUN_AS_NODE);
+process.on('uncaughtException', (e) => logLine('uncaught: ' + ((e && e.stack) || e)));
+process.on('unhandledRejection', (e) => logLine('rejection: ' + ((e && e.stack) || e)));
+
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+logLine('electron api: app=' + typeof app + ' BrowserWindow=' + typeof BrowserWindow);
+if (!app || typeof app.whenReady !== 'function') {
+  logLine('FATAL: electron api missing (running as node?)');
+  process.exit(1);
+}
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -72,6 +89,8 @@ function runPython(args, onLine) {
 }
 
 function createWindow() {
+  logLine('creating window');
+  try {
   win = new BrowserWindow({
     width: 1000,
     height: 780,
@@ -79,20 +98,26 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: '#0d1117',
     title: 'S5 对焦音效定制器',
+    show: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+  } catch (e) {
+    logLine('BrowserWindow threw: ' + ((e && e.stack) || e));
+    throw e;
+  }
+  logLine('window created');
   win.webContents.on('did-fail-load', (e, code, desc) => {
-    console.error('PAGE LOAD FAILED', code, desc);
+    logLine('PAGE LOAD FAILED ' + code + ' ' + desc);
   });
   win.webContents.on('console-message', (e, level, message) => {
-    console.log('RENDERER:', level, message);
+    logLine('RENDERER: ' + level + ' ' + message);
   });
   win.webContents.on('did-finish-load', () => {
-    console.log('PAGE LOADED');
+    logLine('PAGE LOADED');
     win.show();
     win.focus();
   });
@@ -101,10 +126,13 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  logLine('app ready');
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+}).catch((e) => {
+  logLine('whenReady failed: ' + ((e && e.stack) || e));
 });
 
 app.on('window-all-closed', () => {

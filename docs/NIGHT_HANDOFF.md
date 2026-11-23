@@ -79,7 +79,50 @@ python tools/trace_hook.py read
 
 拿到真实的 r0 后，就能在 payload 里**原样复用**它调用 SDD_Read。
 
-### C. 写 FAT 读取 payload（1-2 小时）
+### C. 调用 SDD_Read 探测（需你在场，有死机风险）
+
+工具链已装好（`tools/armgcc`，ARM GCC 15.2.1），payload 用 C 写：
+
+```powershell
+# 编译（若 pwsh 不可用，用同样参数手工调用 gcc/objcopy）
+# 产物：payloads\sd_probe.bin（92 字节）
+```
+
+探测程序 `payloads/sd_probe.c` 会：
+
+```
+r0 = 0x08AB07A4   SD 上下文（已验证符合 SDD_Read 的检查）
+r1 = 0x0F303000   偏移指针（指向 0）
+r2 = 0x0F304000   读缓冲
+r3 = 0x200        512
+blx 0x863C0505    SDD_Read
+```
+
+结果写到 `0x8F300020`：
+
+```
++0  0xA1A1A1A1  = 进入
++4  返回值
++8  读到的第一个字（扇区 0 应为 0x00000000 或 MBR 签名相关）
++12 0xA2A2A2A2  = 正常返回
+```
+
+操作：
+
+```bash
+python tools/load_program.py push payloads/sd_probe.bin
+# 半按快门
+# 读 0x8F300020
+```
+
+**判读**：
+- 看到 `A2A2A2A2` → 调用成功，返回值和数据都有意义
+- 只有 `A1A1A1A1` 没有 `A2A2A2A2` → 调用挂住（拔电池恢复），参数不对
+- 相机死机 → 拔电池，记录现象
+
+### D. 写 FAT 读取 payload（1-2 小时）
+
+
 
 有了 r0 之后：
 1. 用 SDD_Read 读扇区 0（MBR/引导扇区）

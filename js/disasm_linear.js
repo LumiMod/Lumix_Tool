@@ -14,7 +14,7 @@ MCapstone().then((cs) => {
   const lines = [];
   let off = 0;
   let good = 0, bad = 0;
-  while (off < buf.length) {
+  while (off + 2 <= buf.length) {
     let decoded = null;
     try {
       decoded = d.disasm(buf.subarray(off), base + off);

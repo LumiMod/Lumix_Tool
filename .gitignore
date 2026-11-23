@@ -30,3 +30,7 @@ et_acl2/
 et_acl_test/
 F:/et/
 
+tools/armgcc/
+.tmp/
+payloads/*.elf
+

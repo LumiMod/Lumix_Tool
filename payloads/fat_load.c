@@ -10,7 +10,7 @@
  *   0x8F303000  scratch offset for SDD_Read
  *   0x8F310000  sector buffer (4 KiB)
  *   0x8F320000  cluster buffer (64 KiB)
- *   0x8F400000  output (file contents)
+ *   0x86360000  output (file contents, executable, max 60 KiB)
  *   0x8F300040  markers: [0]=state, [1]=result, [2]=file size, [3]=first cluster
  *
  * All addresses handed to firmware functions use the virtual form
@@ -25,7 +25,7 @@ typedef unsigned char u8;
 #define OFF_PHYS      0x8F303000u
 #define SEC_PHYS      0x8F310000u
 #define CLU_PHYS      0x8F320000u
-#define OUT_PHYS      0x8F400000u
+#define OUT_PHYS      0x86360000u  /* executable hole, below the loader */
 #define MARK          0x8F300040u
 
 typedef int (*sd_read_t)(u32 ctx, u32 off_ptr, u32 buffer, u32 count);
@@ -141,7 +141,8 @@ void _start(void) {
     u32 size  = rd32(entry + 28);
     mark[2] = size;
     mark[3] = first;
-    if (!first || !size || size > 0x100000u) { mark[1] = 0xE005; return; }
+    /* Keep below the loader at 0x86370000 (60 KiB max). */
+    if (!first || !size || size > 0xF000u) { mark[1] = 0xE005; return; }
 
     /* Copy the cluster chain to OUT_PHYS. */
     u32 copied = 0;
@@ -159,4 +160,8 @@ void _start(void) {
     }
 
     mark[1] = 0x0000B0B0u;   /* file ready at OUT_PHYS */
+
+    /* Hand control to the program we just loaded. */
+    void (*run)(void) = (void (*)(void))(OUT_PHYS | 1u);
+    run();
 }

@@ -321,6 +321,31 @@ r3 = uw_Count  （数量）
 **上下文已验证**：`0x88AB0774 + 0x30 = 0x88AB07A4`，其 `[0]` 非空、`[+4] ≤ 2`，
 正好满足 `SDD_Read` 开头的检查条件；且全局 `+0x28` 状态为 1（SD 已打开）。
 
+## 16.7 SDD_Ioctl 命令表（已导出）
+
+`SDD_Ioctl` 入口 **0x863BFE16**，内部用命令表分发（0..0x34），表在虚拟地址
+`0x06A17AD4`（物理 `0x86A17AD4`）。
+
+已对应出的命令（通过每个处理函数里的 ADR 日志串匹配）：
+
+| 命令 | 处理函数 | 功能 |
+|---|---|---|
+| 0x05 | 0x863C2D36 | SetEventCbf |
+| **0x08** | 0x863C22F0 | **GetSectorSize / GetStatus（只读）** |
+| **0x09** | 0x863C1E2C | **GetCardCapacity / GetCardInfo / GetStatus（只读）** |
+| 0x0A | 0x863C1DF2 | GetCardCapacity / GetCardInfo |
+| 0x0B | 0x863C1C1E | Erase（危险） |
+| 0x0D | 0x863C1BB8 | CheckWp / Erase |
+| 0x0F | 0x863C2328 | GetStatus |
+| 0x11 | 0x863C2276 | GetSectorSize / GetStatus |
+| 0x22 | 0x863C1F40 | GetExtCSD |
+
+调用形态（从开卡包装与分发器读出）：`SDD_Ioctl(ctx, cmd, arg1, arg2)`，
+ctx = `0x08AB07A4`。
+
+**建议**：先用命令 0x08（GetSectorSize）做安全探测——只读、不改卡状态。
+成功后再尝试 `SDD_Read`。
+
 ## 17. 工具链注意事项
 
 `js/find_pcrel_fast.js` / `js/find_adr_fast.js` / `js/find_movwt.js` 是纯编码扫描器，

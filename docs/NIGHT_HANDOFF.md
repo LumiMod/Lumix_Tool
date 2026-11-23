@@ -79,7 +79,32 @@ python tools/trace_hook.py read
 
 拿到真实的 r0 后，就能在 payload 里**原样复用**它调用 SDD_Read。
 
-### C. 调用 SDD_Read 探测（需你在场，有死机风险）
+### C. 安全验证 SD 上下文（推荐先做）
+
+用只读的 `SDD_Ioctl(cmd=0x08)` 查扇区大小——它只把 `[card+0xC]` 写到输出指针，不改卡状态：
+
+```bash
+python tools/load_program.py push payloads/ioctl_probe.bin
+# 半按快门
+# 读 0x8F300080
+```
+
+期望：
+
+```
++0  0xC1C1C1C1  进入
++4  返回值
++8  0x00000200  扇区大小（关键！）
++12 0xC2C2C2C2  正常返回
+```
+
+- 看到 `0x200` → **上下文和调用约定完全正确**，SDD_Read 大概率也能用
+- 看到 `C1C1C1C1` 但没 `C2C2C2C2` → 调用挂住，拔电池
+- 死机 → 拔电池
+
+### D. 调用 SDD_Read 探测（有风险）
+
+
 
 工具链已装好（`tools/armgcc`，ARM GCC 15.2.1），payload 用 C 写：
 

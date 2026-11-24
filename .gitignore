@@ -34,3 +34,5 @@ tools/armgcc/
 .tmp/
 payloads/*.elf
 
+Lumix_Tool/
+

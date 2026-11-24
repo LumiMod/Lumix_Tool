@@ -19,19 +19,23 @@ sys.path.insert(0, 'tools')
 import s5svc as S
 
 PROGRAM = 0x86370000
-COUNTER = 0x8F302000
-ENTRIES = 0x8F302100
+COUNTER = 0x86380000   # inside the persistent program hole
+ENTRIES = 0x86380100
 
 
 def build_logger(ret, extra=b''):
+    counter_lo = COUNTER & 0xFFFF
+    counter_hi = (COUNTER >> 16) & 0xFFFF
+    entries_lo = ENTRIES & 0xFFFF
+    entries_hi = (ENTRIES >> 16) & 0xFFFF
     asm = f"""
         push {{r4-r7}}
         mov r4, r0
         mov r5, r1
         mov r6, r2
         mov r7, r3
-        movw r3, #0x2000
-        movt r3, #0x8F30
+        movw r3, #{counter_lo:#x}
+        movt r3, #{counter_hi:#x}
         ldr r2, [r3]
         cmp r2, #64
         bhs skip
@@ -39,8 +43,8 @@ def build_logger(ret, extra=b''):
         str r2, [r3]
         subs r2, #1
         lsls r2, r2, #4
-        movw r0, #0x2100
-        movt r0, #0x8F30
+        movw r0, #{entries_lo:#x}
+        movt r0, #{entries_hi:#x}
         add r0, r0, r2
         str r4, [r0]
         str r5, [r0, #4]

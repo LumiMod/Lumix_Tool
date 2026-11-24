@@ -1,4 +1,5 @@
-import { DatabaseOutlined, SoundOutlined } from '@ant-design/icons';
+import { DatabaseOutlined, SoundOutlined, VideoCameraOutlined } from '@ant-design/icons';
+import OpenGate from './OpenGate';
 import Sounds from './sounds/Sounds';
 import Memory from './memory/Memory';
 
@@ -18,5 +19,13 @@ export const tools = [
     description: '只读扫描相机 RAM 暂存区，查看哪些区域可安全写入',
     scope: '只读 · DC-S5',
     component: Memory,
+  },
+  {
+    id: 'open-gate',
+    title: '片门全开',
+    icon: <VideoCameraOutlined />,
+    description: '解锁 DC-S5 的 6K 3:2、5.9K 16:9 与不限时录制，或一键恢复原厂默认。',
+    scope: '写入 RAM · DC-S5',
+    component: OpenGate,
   },
 ];

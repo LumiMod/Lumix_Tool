@@ -34,7 +34,7 @@ export default function Waveform({ buffer, active }) {
   }, [buffer, active, token.colorPrimary]);
 
   return <div className="waveform-panel" style={{ background: token.colorFillAlter }}>
-    <canvas id="waveform" ref={canvasRef} className="waveform" role="img" aria-label="将写入相机的音频波形" />
+    <canvas id="waveform" ref={canvasRef} className="waveform" role="img" aria-label="转换后的音频波形" />
     <Flex justify="space-between"><Typography.Text type="secondary">0:00</Typography.Text><Typography.Text type="secondary">{buffer.duration.toFixed(2)} s</Typography.Text></Flex>
   </div>;
 }

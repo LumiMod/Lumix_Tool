@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('api', {
   restore: () => ipcRenderer.invoke('restore'),
   dump: () => ipcRenderer.invoke('dump'),
   scanMemory: () => ipcRenderer.invoke('scan-memory'),
+  setUnlock: enable => ipcRenderer.invoke('set-unlock', enable === true),
   memoryMap: version => ipcRenderer.invoke('memory-map', version),
   exportMemory: version => ipcRenderer.invoke('export-memory', version),
   applySlot: (index, pcm, samples, version) => ipcRenderer.invoke('apply-slot', { index, pcm, samples, version }),

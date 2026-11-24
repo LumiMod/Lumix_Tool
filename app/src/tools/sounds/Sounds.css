@@ -1,0 +1,52 @@
+.sound-workspace {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.sound-preparation {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(245px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.sound-workspace .ant-card { min-width: 0; }
+.sound-preparation > .ant-card > .ant-card-body { padding: 18px 20px; }
+.sound-workspace > div:empty { display: none; }
+.sound-source-card .ant-card-extra { font-variant-numeric: tabular-nums; font-size: 12px; }
+.sound-source-card #audioDrop:not(.drop-empty) .ant-upload-drag { padding: 0 12px; }
+.sound-source-card .drop-empty .ant-upload-drag {
+  overflow: hidden;
+  border: 1px dashed var(--stroke);
+  border-radius: 6px;
+  background: var(--rail);
+  cursor: default;
+}
+.sound-source-card .drop-empty .ant-upload-drag-hover {
+  border-color: var(--accent); background: var(--tint);
+}
+.sound-source-card .drop-empty .ant-upload-btn { padding: 0; }
+.sound-drop-content {
+  display: grid; justify-items: center; gap: 9px; padding: 18px;
+  color: var(--ink);
+}
+.sound-drop-mark { color: var(--subtle); font-size: 23px; line-height: 1; }
+.sound-drop-content strong { font-size: 15px; line-height: 1.4; font-weight: 600; }
+
+.sound-file-details { display: grid; gap: 3px; }
+.sound-file-details .ant-typography { font-size: 12px; line-height: 1.5; }
+.sound-gain-control { padding: 10px 12px 4px; border: 1px solid var(--stroke); border-radius: 6px; background: var(--rail); }
+.sound-gain-control .ant-slider { margin: 8px 10px 18px; }
+.sound-target { display: grid; gap: 3px; }
+.sound-target strong { overflow-wrap: anywhere; font-size: 19px; line-height: 1.4; }
+.sound-target-ids, .sound-estimate { margin: 8px 0 0; }
+.sound-memory-details { margin: 14px 0; padding-block: 9px; border-block: 1px solid var(--stroke); }
+.sound-workspace summary { cursor: pointer; }
+.sound-workspace details[open] > summary { margin-bottom: 12px; }
+.sound-notes { padding-bottom: 10px; }
+.sound-notes summary { font-weight: 600; }
+.sound-workspace .sound-table-section { min-width: 0; scroll-margin-top: 16px; }
+.sound-workspace #soundTable .ant-table-cell { vertical-align: middle; }
+@media (max-width: 1080px) {
+  .sound-preparation { grid-template-columns: minmax(0, 1.2fr) minmax(235px, 1fr); gap: 12px; }
+  .sound-preparation > .ant-card > .ant-card-body { padding: 15px; }
+}

@@ -5,7 +5,7 @@ const { spawn } = require('node:child_process');
 const { StringDecoder } = require('node:string_decoder');
 const { DriverManager, DRIVER_SCENARIOS, DRIVER_RESULTS } = require('./driver');
 const mockTable = require('./mock-sound-table.json');
-const { START, END, BLOCK, validMap, liveRegions, planAllocation, markRange, mockMemoryMap, hexAddress } = require('./memory.mjs');
+const { START, END, BLOCK, TAIL_BYTES, validMap, liveRegions, planAllocation, markRange, mockMemoryMap, hexAddress } = require('./memory.mjs');
 const SCRATCH_VIRTUAL = START - 0x80000000;
 const isScratch = addr => Number(addr) >= SCRATCH_VIRTUAL && Number(addr) < END - 0x80000000;
 // Stock sound-table entries point into the firmware program image (virtual
@@ -52,7 +52,7 @@ class Runtime {
   constructor({ configPath, legacyConfigPath, scriptPath, bundledPython = null, mock = false, onProgress = () => {}, platform = process.platform }) {
     Object.assign(this, { configPath, legacyConfigPath, scriptPath, bundledPython, mock, onProgress, platform });
     this.python = null;
-    this.mockState = { scenario: 'connected', failNext: false, custom: false, driverScenario: 'ok', driverResult: 'success' };
+    this.mockState = { scenario: 'connected', failNext: false, custom: false, unlock: false, driverScenario: 'ok', driverResult: 'success' };
     this.driver = new DriverManager({ platform, mock, mockState: this.mockState });
     this.mockEntries = mockTable.map(entry => ({ ...entry }));
     this.soundsPath = path.join(path.dirname(configPath), mock ? 'sounds-mock.json' : 'sounds.json');
@@ -197,6 +197,38 @@ class Runtime {
     } finally { this.progressPhase = null; }
   }
 
+  // Open-gate unlock is 19 RAM halfwords. The backend verifies 13 firmware
+  // anchors before its first write, so unsupported bodies are refused untouched.
+  async setUnlock(enable) {
+    if (typeof enable !== 'boolean') return { ok: false, error: '解锁参数无效。' };
+    if (this.mock) {
+      if (this.mockState.scenario === 'unverified') {
+        return { ok: false, supported: false, error: '固件特征不匹配，仅支持初代 DC-S5 (MC801) 官方固件 2.9' };
+      }
+      if (!['connected', 'region-not-free'].includes(this.mockState.scenario)) {
+        return { ok: false, error: '模拟设备未就绪，请先连接相机。' };
+      }
+      this.progressPhase = enable ? 'unlock' : 'lock';
+      try {
+        for (let step = 1; step <= 19; step++) {
+          await new Promise(resolve => setTimeout(resolve, 80));
+          this.emitProgress({ done: step, total: 19 });
+        }
+        this.mockState.unlock = enable;
+        return {
+          ok: true, unlocked: enable, verifiedWords: 19,
+          logs: [enable
+            ? '写入并校验完成：19/19 半字生效（6K 片门全开 + 5.9K + 不限时录制 + 电源开关记忆）'
+            : '恢复并校验完成：19/19 半字已还原为原厂默认状态'],
+        };
+      } finally { this.progressPhase = null; }
+    }
+    if (this.platform !== 'win32') return { ok: false, error: '实机解锁需要 Windows WinUSB 环境。' };
+    this.progressPhase = enable ? 'unlock' : 'lock';
+    try { return await this.run(['set-unlock', enable ? '1' : '0']); }
+    finally { this.progressPhase = null; }
+  }
+
   renameSound({ version, index, label } = {}) {
     if (typeof version !== 'string' || !validIndex(index) || typeof label !== 'string' || label.length > 80) return { ok: false, error: '音效名称无效（最多 80 字）。' };
     const sounds = this.loadSounds();
@@ -278,13 +310,24 @@ class Runtime {
 
   async status() {
     if (this.mock) {
-      const { scenario, custom } = this.mockState;
+      const { scenario, custom, unlock } = this.mockState;
       if (scenario === 'python-missing') return { connected: false, pythonMissing: true, error: '未找到 Python 3，请在设置中指定路径。' };
       if (scenario === 'disconnected') return { connected: false };
       if (!this.driver.mockStatus().ok) return { connected: false };
       if (scenario === 'error') return { connected: true, error: '模拟 USB 读取失败：设备被其他程序占用。' };
-      if (scenario === 'unverified') return { connected: true, model: 'DC-S5', body_version: '0x0280', custom, verified: false, table_problem: null };
-      return { connected: true, model: 'DC-S5', body_version: '0x0290', custom, verified: true, table_problem: null };
+      const unlockInfo = {
+        totalAnchors: 13, totalPatches: 19,
+        verifiedAnchors: scenario === 'unverified' ? 0 : 13,
+        supported: scenario !== 'unverified',
+        firmware: 'MC801 2.9',
+        unlocked: scenario !== 'unverified' && unlock,
+        fullyUnlocked: scenario !== 'unverified' && unlock,
+        stock: scenario !== 'unverified' && !unlock,
+        unlockedWords: scenario === 'unverified' ? 0 : (unlock ? 19 : 2),
+        ...(scenario === 'unverified' ? { error: '固件特征不匹配，仅支持初代 DC-S5 (MC801) 官方固件 2.9' } : {}),
+      };
+      if (scenario === 'unverified') return { connected: true, model: 'DC-S5', body_version: '0x0280', custom, verified: false, table_problem: null, unlock: unlockInfo };
+      return { connected: true, model: 'DC-S5', body_version: '0x0290', custom, verified: true, table_problem: null, unlock: unlockInfo };
     }
     if (!await this.findPython()) return { connected: false, pythonMissing: true, error: '未找到 Python 3，请在设置中指定路径。' };
     // The existing backend imports winreg/WinUSB. Do not run it on macOS/Linux.
@@ -341,7 +384,8 @@ class Runtime {
     const pcm = pcmBuffer(payload);
     if (!validIndex(payload.index)) throw new Error('音效编号必须为 0–27。');
     const addr = payload.regionAddr;
-    if (!Number.isInteger(addr) || addr % BLOCK || addr < START || addr + 16 + pcm.length > END) throw new Error('写入地址必须按 1 KiB 对齐，且完整位于 RAM 暂存区。');
+    const spanLength = 16 + pcm.length + TAIL_BYTES;
+    if (!Number.isInteger(addr) || addr % BLOCK || addr < START || addr + spanLength > END) throw new Error('写入地址必须按 1 KiB 对齐，且完整位于 RAM 暂存区。');
     if (this.mock) {
       if (this.mockState.scenario === 'unverified') return { ok: false, error: 'unsupported firmware: body version 0x0280 has not been verified (verified: 0x0290); writing is disabled' };
       if (this.mockState.staleNext) {
@@ -352,14 +396,18 @@ class Runtime {
         this.mockRam.writeUInt32LE(other, addr - START + 8);
         this.mockRam.writeUInt32LE(1, addr - START + 12);
       }
-      const span = this.mockRam.subarray(addr - START, addr - START + 16 + pcm.length);
+      const span = this.mockRam.subarray(addr - START, addr - START + spanLength);
       // Same rule as s5focus.region_is_free: the 0x8F scratch keeps stale bytes
       // across warm reboots, so only a valid header of another entry blocks a write.
-      const headerIndex = span.readUInt32LE(8), headerSamples = span.readUInt32LE(12);
-      const foreignHeader = span.subarray(0, 8).toString() === 'LMXTSLOT' && headerIndex < 28 &&
-        headerSamples > 0 && headerSamples <= 132300 && headerIndex !== payload.index;
-      if (foreignHeader) {
-        return { ok: false, error: 'region not free', address: hexAddress(addr), index: payload.index };
+      for (let offset = 0; offset < span.length; offset += BLOCK) {
+        const block = span.subarray(offset, offset + 16);
+        if (block.length < 16) break;
+        const headerIndex = block.readUInt32LE(8), headerSamples = block.readUInt32LE(12);
+        const foreignHeader = block.subarray(0, 8).toString() === 'LMXTSLOT' && headerIndex < 28 &&
+          headerSamples > 0 && headerSamples <= 132300 && headerIndex !== payload.index;
+        if (foreignHeader) {
+          return { ok: false, error: 'region not free', address: hexAddress(addr), index: payload.index };
+        }
       }
       const result = await this.mockOperation('apply', payload.samples);
       if (!result.ok) return result;
@@ -368,6 +416,7 @@ class Runtime {
       span.writeUInt32LE(payload.index, 8);
       span.writeUInt32LE(payload.samples, 12);
       pcm.copy(span, 16);
+      span.fill(0, 16 + pcm.length, spanLength);
       const virtual = addr + 16 - 0x80000000;
       raw.writeUInt32LE(virtual, 4);
       raw.writeUInt32LE(payload.samples * 2, 0x14);

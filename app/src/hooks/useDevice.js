@@ -17,7 +17,16 @@ export function useDevice(api) {
     try {
       const driver = await api.driverStatus();
       if (driver.busy) throw new Error(driver.error || '另一个操作正在进行。');
-      patch({ driver });
+      const bindingLost = driver.present === true && (
+        (driver.driverDetectable === true && driver.winusb === false) ||
+        driver.guidRegistered === false ||
+        (Number.isInteger(driver.problemCode) && driver.problemCode !== 0)
+      );
+      if (current.current.device.connected && driver.supported && !driver.error && (driver.present === false || bindingLost)) {
+        patch({ driver, device: { connected: false } });
+      } else {
+        patch({ driver });
+      }
     } catch (error) {
       patch({ driver: { supported: current.current.env?.platform === 'win32' || current.current.env?.mock, ok: false, error: error.message || String(error) } });
     }

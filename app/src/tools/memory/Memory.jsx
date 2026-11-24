@@ -60,10 +60,19 @@ export default function Memory({ device }) {
     </Card>
     <Card title="空间概览">
       <Descriptions column={{ xs: 1, sm: 2, xl: 3 }} items={[
-        ['free', '可写入空间', stats.totalFree], ['largest', '最大连续可写入', stats.largestFree],
-        ['used', 'LumixTool 当前使用', stats.used], ['data', '其他数据', stats.data], ['zero', '全零', stats.zero],
-      ].map(([key, label, value]) => ({ key, label, children: map || key === 'used' ? `${(value / BLOCK).toLocaleString()} KiB` : '—' }))} />
-      <Paragraph type="secondary">当前使用量来自音效表，结束地址向上取整到 1 KiB。可写入空间包括空闲（0x55）、全零和其他数据区段（暂存区热重启后会残留旧数据，残留数据可以覆盖），只排除 LumixTool 当前占用的区域。</Paragraph>
+        ['total', '暂存区总容量', stats.totalBytes],
+        ['free', '可写入空间', stats.totalFree],
+        ['largest', '最大连续可写入', stats.largestFree],
+        ['used', 'LumixTool 当前使用', stats.used],
+        ...(stats.staleMarked > 0 ? [['stale', '已释放槽位残留', stats.staleMarked]] : []),
+      ].map(([key, label, value]) => ({ key, label, children: map || key === 'used' || key === 'total' ? `${(value / BLOCK).toLocaleString()} KiB` : '—' }))} />
+      <Descriptions size="small" style={{ marginTop: 8 }} title={<Text type="secondary">区段类型构成（合计 {((map?.length ?? (END - START)) / BLOCK).toLocaleString()} KiB）</Text>} column={{ xs: 2, sm: 4 }} items={[
+        ['free0x55', '空闲（0x55）', stats.free0x55],
+        ['marked', 'LumixTool', stats.marked],
+        ['data', '其他数据', stats.data],
+        ['zero', '全零', stats.zero],
+      ].map(([key, label, value]) => ({ key, label, children: map ? `${(value / BLOCK).toLocaleString()} KiB` : '—' }))} />
+      <Paragraph type="secondary" style={{ marginTop: 8 }}>暂存区总容量 = LumixTool 标记 + 可写入空间；可写入空间 = 空闲（0x55）+ 其他数据 + 全零（暂存区热重启后会残留旧数据，残留数据可以安全覆盖）。当前使用量来自音效表（含 16 字节头与 2 KiB 尾部静音保护区，向上取整到 1 KiB）。</Paragraph>
       <Space wrap>{KINDS.map(kind => <Space key={kind}><span className="memory-legend" style={{ background: colors[kind] }} /><Text>{names[kind]}</Text></Space>)}</Space>
       <div id="memoryMap" className="memory-map" role="img" aria-label="RAM 暂存区内存分布" style={{ background: token.colorFillSecondary }}>
         {displayMap?.runs.map(item => <Tooltip key={item.start} title={`${names[item.kind]} · ${item.start}–${item.end}（结束地址不含） · ${item.kib} KiB`}>
@@ -77,8 +86,8 @@ export default function Memory({ device }) {
       {live.length ? <Space orientation="vertical">{live.map(region => <Text key={region.index}>#{region.index} → <Text code>{hexAddress(region.start)}</Text>（{((region.end - region.start) / BLOCK).toLocaleString()} KiB）</Text>)}</Space>
         : <Text type="secondary">当前音效表没有指向暂存区的条目。</Text>}
     </Card>
-    <Card title="扫描区段" extra={<Text type="secondary">扫描缓存与本地写入标记；上方地图叠加声表当前占用</Text>}>
-      <Table id="memoryRuns" rowKey="start" columns={columns} dataSource={map?.runs || []} size="small"
+    <Card title="扫描区段" extra={<Text type="secondary">已叠加声表当前占用，与上方分布图一致</Text>}>
+      <Table id="memoryRuns" rowKey="start" columns={columns} dataSource={displayMap?.runs || []} size="small"
         pagination={{ pageSize: 20, showSizeChanger: false }} scroll={{ x: 650 }} locale={{ emptyText: '请先扫描内存' }} />
     </Card>
   </Space>;

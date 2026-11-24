@@ -66,3 +66,40 @@ test('decoder is closed for unsupported or empty audio and errors remain actiona
   await assert.rejects(decodeAudio(new ArrayBuffer(1), 'empty.wav', empty.api), /音频为空/);
   assert.equal(empty.captured.closed, true);
 });
+
+test('tail fade-out zeroes final sample on non-zero endings and applyAudioGain rescales and unclips', async () => {
+  const { decodeAudio, applyAudioGain, FADE_OUT_SAMPLES } = await import('../src/tools/focus-sound/audio.mjs');
+  const constantApi = {
+    AudioContext: class {
+      async decodeAudioData() {
+        return { duration: 0.1, length: 4410, sampleRate: 44100, numberOfChannels: 1, getChannelData: () => new Float32Array(4410).fill(1.2) };
+      }
+      async close() {}
+    },
+    OfflineAudioContext: class {
+      constructor(_ch, frames, rate) { this.frames = frames; this.rate = rate; }
+      createBuffer(_ch, frames) { const d = new Float32Array(frames); return { getChannelData: () => d }; }
+      createBufferSource() { return { connect() {}, start() {} }; }
+      async startRendering() {
+        const out = new Float32Array(this.frames).fill(1.25);
+        return { getChannelData: () => out, duration: this.frames / this.rate };
+      }
+    },
+  };
+  const decoded = await decodeAudio(new ArrayBuffer(8), 'hot.wav', constantApi);
+  assert.equal(decoded.clipped, true);
+  const view0 = new DataView(decoded.pcm);
+  assert.equal(view0.getInt16(0, true), 32767);
+  // Final sample after micro fade-out must be exact 0 to avoid step jump into DMA silence guard.
+  assert.equal(view0.getInt16((decoded.samples - 1) * 2, true), 0);
+  assert.ok(view0.getInt16((decoded.samples - Math.floor(FADE_OUT_SAMPLES / 2)) * 2, true) < 32767);
+
+  // Lowering by -6 dB (~0.501x) recovers unclipped headroom from rawSamples (1.25 * 0.501 ≈ 0.626).
+  const quieter = applyAudioGain(decoded, -6, constantApi);
+  assert.equal(quieter.clipped, false);
+  assert.equal(quieter.gainDb, -6);
+  const viewQuiet = new DataView(quieter.pcm);
+  const sample0 = viewQuiet.getInt16(0, true);
+  assert.ok(sample0 > 19000 && sample0 < 22000, `expected ~20525, got ${sample0}`);
+  assert.equal(viewQuiet.getInt16((quieter.samples - 1) * 2, true), 0);
+});

@@ -1,0 +1,12 @@
+<resources>
+    <color name="lumix_surface">#F5F7FA</color>
+    <color name="lumix_ink">#0F172A</color>
+    <color name="lumix_blue">#2563EB</color>
+
+    <style name="LumixTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/lumix_surface</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

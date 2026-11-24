@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application' version '8.9.2'
+}
+
+android {
+    namespace 'tools.lumix.mobile'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'tools.lumix.mobile'
+        minSdk 26
+        targetSdk 35
+        versionCode 302
+        versionName '0.3.2'
+    }
+    sourceSets.main.assets.srcDir layout.buildDirectory.dir('generated/web')
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}
+
+def bundleWeb = tasks.register('bundleWeb', Exec) {
+    workingDir '../app'
+    inputs.files(fileTree('../app/src'), '../app/index.html', '../app/package.json',
+            '../app/package-lock.json', '../app/vite.config.mjs')
+    outputs.dir layout.buildDirectory.dir('generated/web')
+    if (System.getProperty('os.name').startsWith('Windows')) {
+        commandLine 'cmd.exe', '/d', '/c', 'npm', 'run', 'build:android'
+    } else {
+        commandLine 'npm', 'run', 'build:android'
+    }
+}
+tasks.named('preBuild').configure { dependsOn bundleWeb }

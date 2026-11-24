@@ -3,8 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App as AntApp, ConfigProvider, theme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import 'antd/dist/reset.css';
-import App from './App';
-import './styles.css';
+import App from '@platform-app';
 
 function Root() {
   const [dark, setDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches);

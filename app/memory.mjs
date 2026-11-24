@@ -3,10 +3,13 @@
 export const START = 0x8F000000;
 export const END = 0x8F800000;
 export const BLOCK = 1024;
+// Silent zero tail written right after PCM so ring-DMA overrun before RTOS stop
+// reads silence rather than 0x55/stale scratch bytes or the next slot's header.
+export const TAIL_BYTES = 2048;
 export const KINDS = ['free-0x55', 'lumixtool', 'data', 'zero'];
 export const hexAddress = value => `0x${Number(value).toString(16).padStart(8, '0').toUpperCase()}`;
 export const roundUp = value => Math.ceil(value / BLOCK) * BLOCK;
-export const requiredBytes = samples => roundUp(16 + samples * 2);
+export const requiredBytes = samples => roundUp(16 + samples * 2 + TAIL_BYTES);
 const overlaps = (a, b) => a.start < b.end && b.start < a.end;
 const run = (start, end, kind) => ({ start: hexAddress(start), end: hexAddress(end), kind, kib: (end - start) / BLOCK });
 
@@ -38,9 +41,9 @@ export function liveRegions(entries = []) {
     if (!Number.isInteger(pcm) || !Number.isInteger(bytes) || bytes < 0 || pcm < START || pcm >= END) return [];
     const samples = bytes / 2;
     const start = Math.max(START, pcm - 16);
-    const end = Math.min(END, roundUp(pcm + bytes));
+    const end = Math.min(END, roundUp(pcm + bytes + TAIL_BYTES));
     return [{ index: entry.index, start, end, capacity: end - start, samples,
-      reusable: pcm - 16 >= START && start % BLOCK === 0 && bytes > 0 && pcm + bytes <= END }];
+      reusable: pcm - 16 >= START && start % BLOCK === 0 && bytes > 0 && pcm + bytes + TAIL_BYTES <= END }];
   });
 }
 
@@ -72,19 +75,25 @@ export function memoryStats(map, entries = []) {
   const live = liveRegions(entries);
   const free = freeRanges(map, live);
   const sizes = Object.fromEntries(KINDS.map(kind => [kind, 0]));
-  if (validMap(map)) {
+  const valid = validMap(map);
+  if (valid) {
     const effective = live.reduce((current, item) => markRange(current, item.start, item.end, 'lumixtool'), map);
     for (const item of effective.runs) sizes[item.kind] += Number(item.end) - Number(item.start);
   }
-  // Union live intervals: shared/legacy pointers must not double count usage.
+  // Union block-aligned live intervals so `used` matches markRange's 1 KiB
+  // granularity and shared/legacy pointers never double count usage.
   let used = 0, previousEnd = START;
   for (const item of [...live].sort((a, b) => a.start - b.start)) {
-    used += Math.max(0, item.end - Math.max(previousEnd, item.start));
-    previousEnd = Math.max(previousEnd, item.end);
+    const alignedStart = Math.max(START, Math.floor(item.start / BLOCK) * BLOCK);
+    const alignedEnd = Math.min(END, roundUp(item.end));
+    used += Math.max(0, alignedEnd - Math.max(previousEnd, alignedStart));
+    previousEnd = Math.max(previousEnd, alignedEnd);
   }
-  return { totalFree: free.reduce((sum, item) => sum + item.end - item.start, 0),
+  const totalBytes = valid ? map.length : END - START;
+  const staleMarked = valid ? Math.max(0, sizes.lumixtool - used) : 0;
+  return { totalBytes, totalFree: free.reduce((sum, item) => sum + item.end - item.start, 0),
     largestFree: Math.max(0, ...free.map(item => item.end - item.start)),
-    used, data: sizes.data, zero: sizes.zero, marked: sizes.lumixtool };
+    used, staleMarked, free0x55: sizes['free-0x55'], data: sizes.data, zero: sizes.zero, marked: sizes.lumixtool };
 }
 
 export function planAllocation(map, entries, indices, samples) {

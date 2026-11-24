@@ -37,6 +37,10 @@ class FakeService:
         address, value = item
         self.writes.append(item)
         self.put(address, struct.pack('<H', value))
+        ack = bytearray(16)
+        ack[0], ack[2] = 0x08, 0xFF
+        ack[14] = sum(ack[1:14]) & 0xFF
+        return bytes(ack)
 
     def close(self):
         self.closed = True
@@ -95,19 +99,30 @@ class SlotTests(unittest.TestCase):
                     focus.cmd_apply(self.pcm, 2, 1, addr)
                 service.assert_not_called()
         with self.assertRaises(ValueError):
-            focus.validate_region(0x8F7FFC00, 512)
-        self.assertEqual(focus.validate_region(0x8F7FFC00, 504), 0x8F7FFC00)
+            focus.validate_region(0x8F7FFC00, 1)
+        with self.assertRaises(ValueError):
+            focus.validate_region(0x8F7FF400, 505)
+        self.assertEqual(focus.validate_region(0x8F7FF400, 504), 0x8F7FF400)
         self.assertEqual(self.svc.reads, [])
         self.assertEqual(self.svc.writes, [])
 
-    def test_exact_span_all_55_is_accepted_and_data_just_beyond_ignored(self):
+    def test_exact_span_all_55_is_accepted_tail_zeroed_and_beyond_ignored(self):
         addr = 0x8F000000
-        self.svc.put(addr + 20, b'\x00')
+        beyond = addr + 20 + focus.TAIL_BYTES
+        self.svc.put(beyond, b'\xAB')
         with contextlib.redirect_stdout(io.StringIO()):
             focus.cmd_apply(self.pcm, 2, 1, addr)
         self.assertEqual(self.svc.get(addr, 16), focus.encode_header(1, 2))
         self.assertEqual(self.svc.get(addr + 16, 4), b'\x01\x00\xff\x7f')
-        self.assertEqual(self.svc.get(addr + 20, 1), b'\x00')
+        self.assertEqual(self.svc.get(addr + 20, focus.TAIL_BYTES), b'\x00' * focus.TAIL_BYTES)
+        self.assertEqual(self.svc.get(beyond, 1), b'\xAB')
+
+    def test_foreign_header_in_tail_guard_block_refuses_before_any_write(self):
+        addr = 0x8F000000
+        self.svc.put(addr + 1024, focus.encode_header(6, 2))
+        with self.assertRaises(focus.RegionNotFree):
+            focus.cmd_apply(self.pcm, 2, 1, addr)
+        self.assertEqual(self.svc.writes, [])
 
     def test_stale_bytes_are_overwritten(self):
         addr = 0x8F000000
@@ -270,6 +285,88 @@ class FirmwareGateTest(unittest.TestCase):
         result = json.loads(out.getvalue().splitlines()[-1])
         self.assertFalse(result['verified'])
         self.assertEqual(result['body_version'], '0x0280')
+
+
+class UnlockTests(unittest.TestCase):
+    setUp = SlotTests.setUp
+    cli = SlotTests.cli
+
+    def seed_unlock(self, unlocked=False):
+        for addr, allowed in focus.SIG_CHECKS:
+            self.svc.put(addr, struct.pack('<H', allowed[0]))
+        for addr, unlock_value, stock_value in focus.UNLOCK_PATCHES:
+            self.svc.put(addr, struct.pack('<H', unlock_value if unlocked else stock_value))
+
+    def test_inspect_reports_stock_then_fully_unlocked(self):
+        self.seed_unlock()
+        before = focus.inspect_unlock(self.svc)
+        self.assertTrue(before['supported'])
+        self.assertFalse(before['unlocked'])
+        self.assertFalse(before['fullyUnlocked'])
+        self.assertTrue(before['stock'])
+        self.assertEqual(before['unlockedWords'], 2)  # visibility stays 0x0104 either way
+        self.assertEqual(before['verifiedAnchors'], len(focus.SIG_CHECKS))
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            result = focus.apply_unlock(self.svc, True)
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['verifiedWords'], len(focus.UNLOCK_PATCHES))
+        self.assertEqual(output.getvalue().splitlines()[-1], 'PROGRESS 19 19')
+
+        after = focus.inspect_unlock(self.svc)
+        self.assertTrue(after['supported'])
+        self.assertTrue(after['unlocked'])
+        self.assertTrue(after['fullyUnlocked'])
+        self.assertFalse(after['stock'])
+        self.assertEqual(after['unlockedWords'], len(focus.UNLOCK_PATCHES))
+        self.assertEqual(self.svc.get(focus.CAP_WORD_ADDR, 2), struct.pack('<H', 0x2000))
+        for addr, unlock_value, _stock_value in focus.UNLOCK_PATCHES:
+            self.assertEqual(self.svc.get(addr, 2), struct.pack('<H', unlock_value),
+                             '0x%08X' % addr)
+
+    def test_restore_writes_stock_values_and_clear_unlock(self):
+        self.seed_unlock(unlocked=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = focus.apply_unlock(self.svc, False)
+        self.assertFalse(result['unlocked'])
+        for addr, _unlock_value, stock_value in focus.UNLOCK_PATCHES:
+            self.assertEqual(self.svc.get(addr, 2), struct.pack('<H', stock_value),
+                             '0x%08X' % addr)
+        info = focus.inspect_unlock(self.svc)
+        self.assertFalse(info['unlocked'])
+        self.assertTrue(info['stock'])
+
+    def test_signature_mismatch_refuses_before_any_write(self):
+        self.seed_unlock()
+        self.svc.put(0x86F15E8C, struct.pack('<H', 0x0000))
+        with self.assertRaises(focus.UnsupportedFirmware):
+            focus.apply_unlock(self.svc, True)
+        self.assertEqual(self.svc.writes, [])
+        info = focus.inspect_unlock(self.svc)
+        self.assertFalse(info['supported'])
+        self.assertIn('0x86F15E8C', info['error'])
+
+    def test_status_reports_unlock_readiness(self):
+        self.seed_unlock()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            focus.cmd_status()
+        result = json.loads(out.getvalue().splitlines()[-1])
+        self.assertTrue(result['unlock']['supported'])
+        self.assertFalse(result['unlock']['unlocked'])
+        self.assertTrue(result['unlock']['stock'])
+
+    def test_cli_set_unlock_round_trips_and_rejects_bad_arguments(self):
+        self.seed_unlock()
+        lines = self.cli(['set-unlock', '1'])
+        self.assertTrue(json.loads(lines[-1])['ok'])
+        self.assertEqual(self.svc.get(focus.CAP_WORD_ADDR, 2), struct.pack('<H', 0x2000))
+        lines = self.cli(['set-unlock', '0'])
+        self.assertTrue(json.loads(lines[-1])['ok'])
+        self.assertEqual(self.svc.get(focus.CAP_WORD_ADDR, 2), struct.pack('<H', 0x4628))
+        for bad in (['set-unlock', '2'], ['set-unlock']):
+            result = json.loads(self.cli(bad)[-1])
+            self.assertFalse(result['ok'])
 
 
 class StatusErrorTest(unittest.TestCase):

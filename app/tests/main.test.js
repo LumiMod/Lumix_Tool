@@ -280,3 +280,31 @@ test('preload exposes only explicit memory scan/cache/export channels', () => {
   api.scanMemory(); api.memoryMap('0x0290'); api.exportMemory('0x0290');
   assert.deepEqual(calls, [['scan-memory'], ['memory-map', '0x0290'], ['export-memory', '0x0290']]);
 });
+
+test('main serializes the open-gate unlock and forwards only booleans', async () => {
+  const { handlers, runtime, calls } = await launch();
+  let complete;
+  runtime.setUnlock = enable => {
+    calls.push(enable);
+    if (enable === false) return Promise.resolve({ ok: true, unlocked: false });
+    return new Promise(resolve => { complete = resolve; });
+  };
+  const pending = handlers.get('set-unlock')({}, true);
+  assert.equal((await handlers.get('status')()).busy, true);
+  assert.equal(calls[0], true);
+  complete({ ok: true, unlocked: true });
+  assert.deepEqual(await pending, { ok: true, unlocked: true });
+  await handlers.get('set-unlock')({}, 'yes');
+  assert.equal(calls[1], false);
+});
+
+test('preload exposes the open-gate unlock channel', () => {
+  let api;
+  const calls = [];
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../preload.js'), 'utf8'), { require: () => ({
+    contextBridge: { exposeInMainWorld: (_key, value) => { api = value; } },
+    ipcRenderer: { invoke: (...args) => { calls.push(args); } }, webUtils: {},
+  }) });
+  api.setUnlock(true); api.setUnlock('yes');
+  assert.deepEqual(calls, [['set-unlock', true], ['set-unlock', false]]);
+});

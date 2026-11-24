@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Checkbox, Collapse, Space, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import { driverState } from './driverState.mjs';
+import { driverState, needsDriverSetup } from './driverState.mjs';
 
 const { Paragraph, Text } = Typography;
 
@@ -11,7 +11,7 @@ export function DriverStatus({ driver }) {
     description={<Space orientation="vertical"><span>{status.description}</span>{driver?.driver && <Text type="secondary">驱动：{driver.driver}{driver.provider ? ` · ${driver.provider}` : ''}</Text>}{driver?.warning && <Text className="break-text">{driver.warning}</Text>}</Space>} />;
 }
 
-export default function DriverSetup({ device }) {
+export default function DriverSetup({ device, maintenanceOnly = false }) {
   const [removeCertificate, setRemoveCertificate] = useState(false);
   const [linkError, setLinkError] = useState('');
   const { driver, locked, driverChecking, busy } = device;
@@ -23,11 +23,13 @@ export default function DriverSetup({ device }) {
     } catch (error) { setLinkError(error.message || String(error)); }
   }
   return <Space orientation="vertical" size="middle" className="full-width">
+    {!maintenanceOnly && <>
     <Paragraph>需要管理员权限，将安装一个本机自签名证书用于签名驱动，仅绑定 <Text code>04DA:2370</Text>（含接口 0）。证书加入本机「受信任的根证书颁发机构」与「受信任的发布者」，可在高级区域卸载时移除。</Paragraph>
     <Space wrap>
-      <Button id="installDriver" type="primary" disabled={locked || !driver?.supported || driver?.ok} loading={working && busy.label === '正在安装驱动'} onClick={() => device.runDriver('install')}>一键安装驱动</Button>
-      <Button id="recheckDriver" icon={<ReloadOutlined />} loading={driverChecking} disabled={locked || !driver?.supported} onClick={device.refreshDriver}>重新检测</Button>
+      <Button id="installDriver" type="primary" disabled={locked || !needsDriverSetup(driver)} loading={working && busy.label === '正在安装驱动'} onClick={() => device.runDriver('install')}>一键安装驱动</Button>
+      <Button id="recheckDriver" icon={<ReloadOutlined />} loading={driverChecking} disabled={locked || !driver?.supported} onClick={device.refreshDevice}>重新检测</Button>
     </Space>
+    </>}
     {working && <Alert showIcon type="info" title="等待管理员授权与驱动操作完成…" description="请处理 Windows UAC 弹窗。完成后会自动重新检测；期间请保持应用打开。" />}
     <Collapse items={[{ key: 'advanced', label: '高级', children: <Space orientation="vertical" size="middle" className="full-width">
       <Text>卸载仅删除 LumixTool 发布的驱动包。重新连接 USB，或普通开机恢复 04DA:2382 的系统 MTP 驱动。</Text>

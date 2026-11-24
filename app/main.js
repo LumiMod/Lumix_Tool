@@ -136,6 +136,7 @@ ipcMain.handle('open-external', async (_event, url) => {
 });
 ipcMain.handle('dump', () => deviceOperation('dump', () => runtime.inspect()));
 ipcMain.handle('scan-memory', () => deviceOperation('scan-memory', () => runtime.scanMemory()));
+ipcMain.handle('set-unlock', (_event, enable) => deviceOperation('set-unlock', () => runtime.setUnlock(enable === true)));
 ipcMain.handle('memory-map', (_event, version) => runtime.memoryMap(version));
 ipcMain.handle('export-memory', (_event, version) => deviceOperation('export-memory', async () => {
   const cached = runtime.memoryMap(version);

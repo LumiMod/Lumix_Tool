@@ -31,5 +31,15 @@ test('the real guide renders stable driver controls, platform restrictions and o
     assert.ok(result({ ok: false, message: 'bad signature' }).includes('驱动操作失败'));
     assert.ok(result({ ok: true, action: 'install' }).includes('驱动包已添加，请确认设备绑定'));
     assert.ok(result({ ok: true, action: 'uninstall' }).includes('LumixTool 驱动包已卸载'));
+    const prepareHtml = renderToStaticMarkup(React.createElement(Guide, {
+      device: { driver: { supported: true, present: false, ok: false }, device: {}, api: {}, refreshDriver() {} },
+      navigate() {}, active: false,
+    }));
+    assert.ok(prepareHtml.includes('自动休眠'), 'prepare step warns about camera auto-sleep disconnecting USB');
+    const connectedHtml = renderToStaticMarkup(React.createElement(Guide, {
+      device: { driver: { supported: true, present: true, ok: true }, ready: true, device: { model: 'DC-S5', body_version: '0x0290' }, api: {}, refreshDriver() {} },
+      navigate() {}, active: false,
+    }));
+    assert.ok(connectedHtml.includes('自动休眠'), 'connected step reminds about auto-sleep before long writes');
   } finally { await server.close(); }
 });

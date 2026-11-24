@@ -31,6 +31,45 @@ async function settleUntil(predicate) {
   assert.fail('Hook did not settle.');
 }
 
+test('driver polling clears stale camera data only after confirmed disconnection or binding loss', async t => {
+  const healthy = { supported: true, present: true, ok: true, winusb: true, guidRegistered: true, problemCode: 0 };
+  let driver = healthy;
+  const camera = { connected: true, soundTable: { ok: true }, memoryMap: { ok: true } };
+  const hook = mount({
+    env: async () => ({ platform: 'win32', python: 'python.exe' }),
+    driverStatus: async () => driver,
+    status: async () => camera,
+    onProgress: () => () => {},
+  });
+  t.after(hook.unmount);
+  await settleUntil(() => !hook.state().checking);
+  for (driver of [
+    { supported: true, present: null, error: 'USB enumeration failed' },
+    { supported: true, present: true, driverDetectable: false, winusb: false, guidRegistered: null },
+    { supported: true, present: true, winusb: true, guidRegistered: null, problemCode: null },
+  ]) {
+    await hook.actions.refreshDriver();
+    assert.equal(hook.state().device, camera);
+  }
+  for (const result of [
+    { present: false },
+    { present: false, normalPresent: true },
+    { present: true, driverDetectable: true, winusb: false },
+    { present: true, winusb: true, guidRegistered: false },
+    { present: true, winusb: true, problemCode: 28 },
+  ]) {
+    driver = { supported: true, ok: false, ...result };
+    await hook.actions.refreshDriver();
+    assert.equal(hook.state().device.connected, false);
+    assert.equal(hook.state().device.soundTable, undefined);
+    assert.equal(hook.state().device.memoryMap, undefined);
+    await assert.rejects(hook.actions.runOperation({ execute: () => assert.fail('unexpected camera call') }), /设备尚未就绪/);
+    driver = healthy;
+    await hook.actions.refreshDevice();
+    assert.equal(hook.state().device, camera);
+  }
+});
+
 test('driver install works without Python/camera readiness and holds UI lock through follow-up detection', async t => {
   let finishInstall;
   let finishFollowup;

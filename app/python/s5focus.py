@@ -9,6 +9,7 @@ Commands:
   restore                        -> restore the stock ID1 entry
   restore-id <id> <32-byte-hex>  -> restore any entry from a saved hex blob
   scan [start] [length]          -> read-only map of free (0x55/zero) scratch RAM
+  set-unlock <0|1>               -> restore or apply the 19 open-gate RAM patches
 
 All writes are RAM-only; a battery pull restores stock behaviour.
 """
@@ -36,11 +37,66 @@ SCRATCH_START = 0x8F000000
 SCRATCH_END = 0x8F800000
 HEADER_MAGIC = b"LMXTSLOT"
 HEADER_SIZE = 16
+# Firmware configures a 2x ring buffer for IDs 1..3 and stops DMA asynchronously
+# on soundplay_task after timer #3 fires; 2 KiB (~23 ms) of trailing zeros keeps
+# the DMA overrun window silent instead of playing 0x55/stale scratch bytes.
+TAIL_BYTES = 2048
 SLOT_COUNT = 28
 MAX_SAMPLES = 3 * 44100
 ORIG_ID1 = bytes.fromhex(
     "010000008031aa06006aaa0680f5bf068066c00680380000b2ac310601000000"
 )
+
+# rileydeacon/s5-unlocker: MC801 firmware 2.9 signature anchors (address, allowed
+# halfword values). A mismatch means this is not the body the patches were
+# measured on, so no write may happen.
+SIG_CHECKS = (
+    (0x866B493A, (0x2801,)),
+    (0x866B493E, (0xB2E0,)),
+    (0x866B4952, (0x486B,)),
+    (0x866B4956, (0xBD10,)),
+    (0x86F15E8C, (0x00CE,)),
+    (0x86F15E98, (0xFFFF,)),
+    (0x87089604, (0x00CE,)),
+    (0x87089634, (0xFFFF,)),
+    (0x08A68C4C, (0x00CE,)),
+    (0x08A6844C, (0x00CE,)),
+    (0x868261B4, (0x460D,)),
+    (0x868261B6, (0x4628, 0x2000)),
+    (0x868261B8, (0xE8BD,)),
+)
+
+# rileydeacon/s5-unlocker: 19 volatile RAM halfword patches
+# (address, unlocked value, stock value). All writes are RAM-only and are gone
+# after a battery pull.
+UNLOCK_PATCHES = (
+    # 1) NTSC validator whitelist (0x86F15E30 tail)
+    (0x86F15E90, 0x00F1, 0x00D1),
+    (0x86F15E92, 0x80F1, 0x80D1),
+    (0x86F15E94, 0x00ED, 0x00D2),
+    (0x86F15E96, 0x80ED, 0x80D2),
+    # 2) master ROM-in-RAM MOV template (0x87089524 tail, survives soft power-off)
+    (0x87089614, 0x00F1, 0x00D1),
+    (0x8708961C, 0x80F1, 0x80D1),
+    (0x87089624, 0x00ED, 0x00D2),
+    (0x8708962C, 0x80ED, 0x80D2),
+    # 3) active NTSC MOV source template (0x08A68B6C tail)
+    (0x08A68C5C, 0x00F1, 0x00D1),
+    (0x08A68C64, 0x80F1, 0x80D1),
+    (0x08A68C6C, 0x00ED, 0x00D2),
+    (0x08A68C74, 0x80ED, 0x80D2),
+    # 4) live UI menu table (0x08A6836C tail, visibility=0x0104)
+    (0x08A6845C, 0x00F1, 0x00D1),
+    (0x08A6845E, 0x0104, 0x0104),
+    (0x08A68464, 0x80F1, 0x80D1),
+    (0x08A6846C, 0x00ED, 0x00D2),
+    (0x08A6846E, 0x0104, 0x0104),
+    (0x08A68474, 0x80ED, 0x80D2),
+    # 5) unlimited recording in every limited mode (0x86826102 returns 0)
+    (0x868261B6, 0x2000, 0x4628),
+)
+
+CAP_WORD_ADDR = 0x868261B6
 
 
 def read_bytes(svc, addr, n):
@@ -67,10 +123,14 @@ def entry_addr(idx):
     return TBL + validate_index(idx) * 32
 
 
+def span_bytes(samples):
+    return HEADER_SIZE + samples * 2 + TAIL_BYTES
+
+
 def validate_region(addr, samples):
     if (type(addr) is not int or addr % 1024 != 0
             or not SCRATCH_START <= addr < SCRATCH_END
-            or addr + HEADER_SIZE + samples * 2 > SCRATCH_END):
+            or addr + span_bytes(samples) > SCRATCH_END):
         raise ValueError("region address must be 1 KiB aligned and span within 0x%08X..0x%08X"
                          % (SCRATCH_START, SCRATCH_END))
     return addr
@@ -95,10 +155,11 @@ def region_is_free(raw, idx):
     """The 0x8F scratch area keeps stale bytes across boots, so only an
     existing slot header for a different index counts as occupied."""
     validate_index(idx)
-    header = decode_header(raw)
-    if header is None:
-        return True
-    return header[0] == idx
+    for offset in range(0, len(raw), 1024):
+        header = decode_header(raw[offset:offset + HEADER_SIZE])
+        if header is not None and header[0] != idx:
+            return False
+    return True
 
 
 class RegionNotFree(RuntimeError):
@@ -109,11 +170,15 @@ class RegionNotFree(RuntimeError):
 
 def guard_region(svc, idx, samples, addr):
     validate_region(addr, samples)
-    raw = read_bytes(svc, addr, HEADER_SIZE + samples * 2)
-    old_header = decode_header(raw)
-    if (old_header and addr + HEADER_SIZE + old_header[1] * 2 > SCRATCH_END
-            or not region_is_free(raw, idx)):
-        raise RegionNotFree(addr)
+    total = span_bytes(samples)
+    for offset in range(0, total, 1024):
+        block = read_bytes(svc, addr + offset, min(1024, total - offset))
+        if offset == 0:
+            old_header = decode_header(block)
+            if old_header and addr + HEADER_SIZE + old_header[1] * 2 > SCRATCH_END:
+                raise RegionNotFree(addr)
+        if not region_is_free(block, idx):
+            raise RegionNotFree(addr)
     return addr
 
 
@@ -133,6 +198,94 @@ class UnsupportedFirmware(RuntimeError):
 
 def read_body_version(svc):
     return struct.unpack_from("<H", read_bytes(svc, VERSION_ADDR, 2), 0)[0]
+
+
+def read_half(svc, addr):
+    return struct.unpack_from("<H", read_bytes(svc, addr, 2), 0)[0]
+
+
+def read_halves(svc, addrs):
+    """Read scattered halfwords, reusing each 1 KiB block they fall into."""
+    blocks = {}
+    out = []
+    for addr in addrs:
+        base = addr & ~0x3FF
+        if base not in blocks:
+            blocks[base] = read_bytes(svc, base, 1024)
+        out.append(struct.unpack_from("<H", blocks[base], addr - base)[0])
+    return out
+
+
+def write_half(svc, addr, value):
+    ack = svc.exchange_write(protocol().build_0x9c(addr, value & 0xFFFF))
+    if (len(ack) < 6 or ack[0] != 0x08 or ack[1] != 0 or ack[2] != 0xFF
+            or ack[3] not in (0x00, 0x01)
+            or ack[-2] != (sum(ack[1:-2]) & 0xFF) or ack[-1] != 0):
+        raise RuntimeError("0x9C 写入被拒绝或校验和错误 (0x%08X)" % addr)
+
+
+def verify_unlock_signatures(svc):
+    values = read_halves(svc, [addr for addr, _allowed in SIG_CHECKS])
+    for (addr, allowed), value in zip(SIG_CHECKS, values):
+        if value not in allowed:
+            raise UnsupportedFirmware(
+                "固件特征不匹配 (0x%08X = 0x%04X)，仅支持初代 DC-S5 (MC801) 固件 2.9"
+                % (addr, value))
+
+
+def inspect_unlock(svc):
+    """Read-only: are the open-gate anchors present and which patches are live?"""
+    info = {"totalAnchors": len(SIG_CHECKS), "totalPatches": len(UNLOCK_PATCHES)}
+    try:
+        values = read_halves(svc, [addr for addr, _allowed in SIG_CHECKS]
+                             + [patch[0] for patch in UNLOCK_PATCHES]
+                             + [CAP_WORD_ADDR])
+        anchors = values[:len(SIG_CHECKS)]
+        for (addr, allowed), value in zip(SIG_CHECKS, anchors):
+            if value not in allowed:
+                raise UnsupportedFirmware(
+                    "固件特征不匹配 (0x%08X = 0x%04X)，仅支持初代 DC-S5 (MC801) 固件 2.9"
+                    % (addr, value))
+        patch_values = values[len(SIG_CHECKS):len(SIG_CHECKS) + len(UNLOCK_PATCHES)]
+        unlocked_words = sum(1 for patch, value in zip(UNLOCK_PATCHES, patch_values)
+                             if value == patch[1])
+        stock_words = sum(1 for patch, value in zip(UNLOCK_PATCHES, patch_values)
+                          if value == patch[2])
+        cap_word = values[-1]
+        unlocked = unlocked_words == len(UNLOCK_PATCHES) or cap_word == 0x2000
+        info.update({
+            "supported": True,
+            "firmware": "MC801 2.9",
+            "unlocked": unlocked,
+            "fullyUnlocked": unlocked_words == len(UNLOCK_PATCHES),
+            "stock": stock_words == len(UNLOCK_PATCHES),
+            "unlockedWords": unlocked_words,
+            "verifiedAnchors": len(SIG_CHECKS),
+        })
+    except Exception as exc:  # wrong body, wrong addresses or a dropped USB frame
+        info.update({"supported": False, "unlocked": False, "error": str(exc)})
+    return info
+
+
+def apply_unlock(svc, enable):
+    """Write or restore the 19 open-gate patches, verifying every readback."""
+    verify_unlock_signatures(svc)
+    logs = ["特征校验通过：MC801 固件 2.9（%d/%d 锚点吻合）"
+            % (len(SIG_CHECKS), len(SIG_CHECKS))]
+    total = len(UNLOCK_PATCHES)
+    for index, (addr, unlocked_value, stock_value) in enumerate(UNLOCK_PATCHES):
+        target = unlocked_value if enable else stock_value
+        write_half(svc, addr, target)
+        got = read_half(svc, addr)
+        if got != target:
+            raise RuntimeError("回读校验不一致 0x%08X：实际 0x%04X，期望 0x%04X"
+                               % (addr, got, target))
+        print("PROGRESS %d %d" % (index + 1, total), flush=True)
+    logs.append(
+        "写入并校验完成：%d/%d 半字生效（6K 片门全开 + 5.9K + 不限时录制 + 电源开关记忆）"
+        % (total, total) if enable else
+        "恢复并校验完成：%d/%d 半字已还原为原厂默认状态" % (total, total))
+    return {"ok": True, "unlocked": bool(enable), "verifiedWords": total, "logs": logs}
 
 
 def entry_problem(raw, idx):
@@ -193,6 +346,7 @@ def cmd_status():
             "id1_samples": size // 2,
             "custom": SCRATCH_START - 0x80000000 <= addr < SCRATCH_END - 0x80000000,
             "body_version": "0x%04X" % ver,
+            "unlock": inspect_unlock(svc),
         }))
     except Exception as exc:
         print(json.dumps({"connected": True, "error": str(exc)}))
@@ -229,7 +383,7 @@ def write_halfwords(svc, addr, data):
 
 
 def write_pcm(svc, path, samples, idx, region_addr):
-    # Guard the exact header + PCM span before writing even its header.
+    # Guard the exact header + PCM + silent DMA tail span before writing even its header.
     header = encode_header(idx, samples)
     validate_region(region_addr, samples)
     with open(path, "rb") as source:
@@ -238,10 +392,13 @@ def write_pcm(svc, path, samples, idx, region_addr):
         raise RuntimeError("PCM size mismatch")
     addr = guard_region(svc, idx, samples, region_addr)
     write_halfwords(svc, addr, header)
-    for i in range(samples):
-        write_halfwords(svc, addr + HEADER_SIZE + i * 2, data[i * 2:i * 2 + 2])
-        if (i + 1) % 2000 == 0 or i + 1 == samples:
-            print("PROGRESS %d %d" % (i + 1, samples), flush=True)
+    payload = data + b"\x00" * TAIL_BYTES
+    total_halfwords = len(payload) // 2
+    for i in range(total_halfwords):
+        write_halfwords(svc, addr + HEADER_SIZE + i * 2, payload[i * 2:i * 2 + 2])
+        if (i + 1) % 2000 == 0 or i + 1 == total_halfwords:
+            done = samples if i + 1 == total_halfwords else max(1, (i + 1) * samples // total_halfwords)
+            print("PROGRESS %d %d" % (done, samples), flush=True)
     return addr + HEADER_SIZE - 0x80000000
 
 
@@ -330,6 +487,14 @@ def summarize_blocks(start, labels, block=1024):
              "kind": names[r["kind"]], "kib": (r["end"] - r["start"]) // 1024} for r in runs]
 
 
+def cmd_set_unlock(enable):
+    svc = protocol().Service(settle=0.002)
+    try:
+        print(json.dumps(apply_unlock(svc, enable)))
+    finally:
+        svc.close()
+
+
 def cmd_scan(start=SCRATCH_START, length=SCRATCH_END - SCRATCH_START):
     """Read-only: map which 1 KiB blocks after the scratch base are free."""
     if (start % 1024 or length <= 0 or length % 1024
@@ -352,7 +517,7 @@ def cmd_scan(start=SCRATCH_START, length=SCRATCH_END - SCRATCH_START):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["status", "dump", "apply", "apply-id", "apply-slot",
-                                    "restore", "restore-id", "scan"])
+                                    "restore", "restore-id", "scan", "set-unlock"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     if a.cmd == "status":
@@ -371,6 +536,10 @@ def main():
         cmd_apply(a.args[1], int(a.args[2]), int(a.args[0]), int(a.args[3], 0))
     elif a.cmd == "restore":
         cmd_restore()
+    elif a.cmd == "set-unlock":
+        if len(a.args) != 1 or a.args[0] not in ("0", "1"):
+            raise ValueError("set-unlock requires 0 or 1")
+        cmd_set_unlock(a.args[0] == "1")
     else:
         cmd_restore_id(int(a.args[0]), a.args[1])
 

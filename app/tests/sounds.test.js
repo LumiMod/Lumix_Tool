@@ -81,8 +81,8 @@ test('batch regions are independent, progress is overall and per-entry, restorat
   const result = await runtime.soundBatch('apply', { indices: [1, 0, 27], pcm: new ArrayBuffer(20), samples: 10 });
   assert.deepEqual(result, { ok: true, succeeded: [1, 0, 27] });
   assert.equal(runtime.mockEntries[1].addr, '0x0F000010');
-  assert.equal(runtime.mockEntries[0].addr, '0x0F000410');
-  assert.equal(runtime.mockEntries[27].addr, '0x0F000810');
+  assert.equal(runtime.mockEntries[0].addr, '0x0F000C10');
+  assert.equal(runtime.mockEntries[27].addr, '0x0F001810');
   assert.equal(runtime.mockEntries[1].size, 20); // table length is PCM bytes
   assert.ok(events.every(e => e.overallTotal === 30));
   assert.ok(events.every((e, i) => i === 0 || e.overallDone >= events[i - 1].overallDone));

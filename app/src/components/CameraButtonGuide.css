@@ -1,0 +1,126 @@
+.camera-instructions {
+  display: grid;
+  grid-template-columns: minmax(240px, .85fr) minmax(280px, 1.15fr);
+  align-items: center;
+  gap: clamp(18px, 3vw, 46px);
+  padding: clamp(18px, 2.3vw, 32px);
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+}
+.camera-instructions__copy h3 {
+  margin: 0 0 20px;
+  color: var(--ink);
+  font-size: clamp(18px, 1.7vw, 23px);
+  font-weight: 650;
+  line-height: 1.4;
+}
+.camera-instructions__list {
+  padding-inline-start: 1.25em;
+  margin: 0 0 22px;
+  color: var(--ink);
+}
+.camera-instructions__list li { padding-left: 4px; }
+.camera-instructions__list li + li { margin-top: 14px; }
+.camera-instructions__list li::marker { color: var(--subtle); font-weight: 600; }
+.camera-instructions__list strong { font-size: 14px; font-weight: 650; }
+.camera-instructions__list li[aria-current]::marker,
+.camera-instructions__list li[aria-current] strong { color: var(--accent, #005fb8); }
+.camera-instructions__list p {
+  margin: 3px 0 0;
+  color: var(--subtle);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.camera-instructions__figure { margin: 0; min-width: 0; }
+.camera-instructions__surface {
+  display: grid;
+  justify-items: center;
+  padding: 17px 12px 12px;
+  background: #f7f8fa;
+  border: 1px solid #e2e5ea;
+  border-radius: 8px;
+}
+.camera-instructions__photo { position: relative; width: 100%; max-width: 408px; }
+.camera-instructions__photo img { width: 100%; height: auto; display: block; mix-blend-mode: multiply; }
+.camera-instructions__ring {
+  position: absolute;
+  width: 6.2%;
+  min-width: 18px;
+  aspect-ratio: 1;
+  border: 2px solid #087be0;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px white;
+}
+.camera-instructions__ring > span {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fff;
+  background: #075da6;
+  font: 600 12px/1.5 'Segoe UI', sans-serif;
+  white-space: nowrap;
+}
+.camera-instructions__ring > span::after {
+  content: '';
+  position: absolute;
+  left: calc(50% - 1px);
+  width: 2px;
+  height: 9px;
+  top: 100%;
+  background: #2083da;
+}
+.camera-instructions__figure[data-stage="1"] .camera-instructions__ring,
+.camera-instructions__figure[data-stage="2"] .camera-instructions__ring {
+  background: #2388e144;
+  box-shadow: 0 0 0 1px #fff, 0 0 0 4px #66b6ff70;
+}
+.camera-instructions__figure[data-stage="1"][data-playing="true"] .camera-instructions__ring::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 2px solid #198ce9;
+  border-radius: 50%;
+  animation: camera-key-press 1.3s ease-out infinite;
+}
+@keyframes camera-key-press { to { opacity: 0; transform: scale(1.65); } }
+.camera-instructions__figure figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0 0;
+  color: var(--subtle);
+  font-size: 12px;
+}
+.camera-instructions__play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 3px 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--accent, #005fb8);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+}
+.camera-instructions__play:hover { background: var(--tint); }
+.camera-instructions__play:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.camera-instructions__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (prefers-reduced-motion: reduce) { .camera-instructions__ring::after { animation: none !important; } }
+@media (max-height: 740px) { .camera-instructions__photo { max-width: 320px; } }
+@container (max-width: 610px) {
+  .camera-instructions { grid-template-columns: 1fr; }
+  .camera-instructions__photo { max-width: 290px; }
+}
+@media (prefers-color-scheme: dark) {
+  .camera-instructions__surface { background: #d9dde2; border-color: #78838c; }
+}

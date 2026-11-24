@@ -1,0 +1,13 @@
+LUMIX DC-S5 product photography: Panasonic.
+DC-S5K front three-quarter view, Panasonic UK product page:
+https://www.panasonic.com/uk/consumer/cameras-camcorders/lumix-mirrorless-cameras/lumix-s-full-frame-cameras/dc-s5k.html
+Original transparent image:
+https://panasonic.scene7.com/is/image/Panasonic/ast-1157937-28?fmt=png-alpha&hei=1100&wid=1100
+Transparent margins trimmed and encoded as WebP. Product imagery retains its original copyright.
+
+DC-S5 rear view: Panasonic, DC-S5E-K product datasheet (Dutch).
+Source document distributed by Nivo Schweitzer:
+https://www.nivo-schweitzer.nl/media/docs/original_datasheet-dc-s5e-k.pdf
+The rear product photo is cropped to the camera and encoded as WebP.
+Button names checked against the DC-S5 operating instructions, page 28:
+https://eww.pavc.panasonic.co.jp/dscoi/DC-S5/P_PP/DC-S5_DVQP2197ZD_full_eng.pdf#page=28

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { Runtime } = require('../runtime');
-const { START, END, liveRegions, memoryStats, planAllocation, markRange, mockMemoryMap, validMap } = require('../memory.mjs');
+const { START, END, TAIL_BYTES, liveRegions, memoryStats, planAllocation, markRange, mockMemoryMap, validMap } = require('../memory.mjs');
 
 const scanned = (map = mockMemoryMap(), bodyVersion = '0x0290') => ({ ...map, bodyVersion, scannedAt: '2026-11-22T00:00:00.000Z' });
 // The table's +0x14 length is PCM bytes (verified on hardware), i.e. 2 per sample.
@@ -30,37 +30,37 @@ test('malformed or incomplete caches require a scan and cannot drive allocation'
 
 test('reuse uses dump ownership, rounded capacity and the same start', () => {
   const entries = [owned(1, START + 1024, 600)];
-  assert.deepEqual(liveRegions(entries)[0], { index: 1, start: START + 1024, end: START + 3072, capacity: 2048, samples: 600, reusable: true });
+  assert.deepEqual(liveRegions(entries)[0], { index: 1, start: START + 1024, end: START + 5120, capacity: 4096, samples: 600, reusable: true });
   const result = planAllocation(mockMemoryMap(), entries, [1], 1000);
   assert.equal(result.ok, true);
   assert.equal(result.allocations[0].start, START + 1024);
   assert.equal(result.allocations[0].reused, true);
   assert.equal(result.needed, 0);
-  const moved = planAllocation(markRange(mockMemoryMap(), START + 1024, START + 3072, 'lumixtool'), entries, [1], 1500);
+  const moved = planAllocation(markRange(mockMemoryMap(), START + 1024, START + 5120, 'lumixtool'), entries, [1], 1500);
   assert.equal(moved.allocations[0].reused, false);
-  assert.equal(moved.allocations[0].start, START + 3072);
+  assert.equal(moved.allocations[0].start, START + 5120);
 });
 
 test('first fit avoids every other live span and earlier batch allocations; stale data and zero blocks are allocatable', () => {
   const map = mockMemoryMap();
-  const entries = [owned(2, START, 100), owned(3, START + 2048, 100)];
+  const entries = [owned(2, START, 100), owned(3, START + 6144, 100)];
   const result = planAllocation(map, entries, [1, 4], 500);
   assert.equal(result.ok, true);
-  assert.deepEqual(result.allocations.map(item => item.start), [START + 1024, START + 3072]);
+  assert.deepEqual(result.allocations.map(item => item.start), [START + 3072, START + 9216]);
   // Since 730faad the 0x8F scratch keeps stale bytes across warm reboots, so a
   // scanned 'data' run is allocatable; only LumixTool-owned spans are skipped.
   const [firstFree, dataRun] = map.runs;
   assert.deepEqual([firstFree.kind, dataRun.kind], ['free-0x55', 'data']);
-  const largeLive = [owned(2, START, (Number(firstFree.end) - START - 16) / 2)];
+  const largeLive = [owned(2, START, (Number(firstFree.end) - START - 16 - TAIL_BYTES) / 2)];
   assert.equal(planAllocation(map, largeLive, [1], 100).allocations[0].start, Number(dataRun.start));
   const claimed = markRange(map, Number(dataRun.start), Number(dataRun.end), 'lumixtool');
   assert.equal(planAllocation(claimed, largeLive, [1], 100).allocations[0].start, Number(dataRun.end));
   // Legacy unaligned allocations are protected but cannot be reused.
   const legacy = planAllocation(map, [owned(2, START + 256, 500)], [1], 500);
-  assert.equal(legacy.allocations[0].start, START + 2048);
+  assert.equal(legacy.allocations[0].start, START + 4096);
   const alias = planAllocation(map, [owned(1, START, 100), owned(2, START, 100)], [1], 100);
   assert.equal(alias.allocations[0].reused, false);
-  assert.equal(alias.allocations[0].start, START + 1024);
+  assert.equal(alias.allocations[0].start, START + 3072);
 });
 
 test('live ownership reads the raw table and includes the very first scratch PCM address', () => {
@@ -68,55 +68,60 @@ test('live ownership reads the raw table and includes the very first scratch PCM
   raw.writeUInt32LE(0x0F000010, 4); raw.writeUInt32LE(1200, 0x14); // 600 samples
   const live = liveRegions([{ index: 1, addr: 0, size: 0, hex: raw.toString('hex') }]);
   assert.equal(live[0].start, START);
-  assert.equal(live[0].capacity, 2048);
+  assert.equal(live[0].capacity, 4096);
   assert.equal(liveRegions([{ index: 2, addr: 0x0F800000, size: 10 }]).length, 0);
   const stats = memoryStats(mockMemoryMap(), [owned(1, START, 100), owned(2, START, 100)]);
-  assert.equal(stats.used, 1024);
+  assert.equal(stats.used, 3072);
   const freeBytes = mockMemoryMap().runs.filter(run => run.kind !== 'lumixtool')
     .reduce((sum, run) => sum + Number(run.end) - Number(run.start), 0);
-  assert.equal(stats.totalFree, freeBytes - 1024);
+  assert.equal(stats.totalFree, freeBytes - 3072);
+  assert.equal(stats.totalBytes, stats.used + stats.staleMarked + stats.totalFree);
+  assert.equal(stats.totalFree, stats.free0x55 + stats.zero + stats.data);
 });
 
 test('batch insufficient space reports needed, total and largest before any write', async t => {
   const { runtime } = fixture(t);
-  runtime.saveMemoryMap(scanned({ start: '0x8F000000', length: 1024,
-    runs: [{ start: '0x8F000000', end: '0x8F000400', kib: 1, kind: 'free-0x55' }] }));
+  runtime.saveMemoryMap(scanned({ start: '0x8F000000', length: 3072,
+    runs: [{ start: '0x8F000000', end: '0x8F000C00', kib: 3, kind: 'free-0x55' }] }));
   let writes = 0;
   runtime.applySlot = () => { writes++; throw new Error('must allocate all before writing'); };
   const result = await runtime.soundBatch('apply', { indices: [1, 2], samples: 400, pcm: new ArrayBuffer(800) });
   assert.equal(result.code, 'insufficient-space');
-  assert.equal(result.needed, 2048);
-  assert.equal(result.totalFree, 1024);
-  assert.equal(result.largestFree, 1024);
+  assert.equal(result.needed, 6144);
+  assert.equal(result.totalFree, 3072);
+  assert.equal(result.largestFree, 3072);
   assert.deepEqual(result.allocations, []);
   assert.deepEqual(result.succeeded, []);
-  assert.match(result.error, /需新分配 2 KiB.*可用 1 KiB.*最大连续可写入 1 KiB/);
+  assert.match(result.error, /需新分配 6 KiB.*可用 3 KiB.*最大连续可写入 3 KiB/);
   assert.equal(writes, 0);
 });
 
 test('fragmented free space can be insufficient despite enough total bytes', () => {
-  let map = { start: '0x8F000000', length: 4096, runs: [{ start: '0x8F000000', end: '0x8F001000', kind: 'free-0x55' }] };
-  map = markRange(map, START + 1024, START + 3072, 'lumixtool');
+  let map = { start: '0x8F000000', length: 6144, runs: [{ start: '0x8F000000', end: '0x8F001800', kind: 'free-0x55' }] };
+  map = markRange(map, START + 2048, START + 4096, 'lumixtool');
   const result = planAllocation(map, [], [1], 600);
   assert.equal(result.ok, false);
-  assert.equal(result.totalFree, 2048);
-  assert.equal(result.largestFree, 1024);
+  assert.equal(result.totalFree, 4096);
+  assert.equal(result.largestFree, 2048);
   assert.equal(planAllocation(null, [], [1], 100).needsScan, true);
 });
 
-test('successful writes update the cache, preserve scan time and are reusable by the same entry', async t => {
+test('successful writes update the cache, zero the DMA tail guard, preserve scan time and are reusable by the same entry', async t => {
   const { runtime } = fixture(t);
   runtime.saveMemoryMap(scanned());
-  const write = (index, samples) => runtime.soundBatch('apply', { indices: [index], samples, pcm: new ArrayBuffer(samples * 2) });
+  const write = (index, samples) => runtime.soundBatch('apply', { indices: [index], samples, pcm: Buffer.alloc(samples * 2, 0x7F) });
   assert.equal((await write(1, 100)).ok, true);
+  // The 2 KiB silent DMA guard right after PCM must be zeroed over mockRam's 0x55 fill.
+  const tailSlice = runtime.mockRam.subarray(16 + 200, 16 + 200 + TAIL_BYTES);
+  assert.ok(tailSlice.every(b => b === 0));
   assert.equal((await write(2, 100)).ok, true);
   assert.equal(runtime.mockEntries[1].addr, '0x0F000010');
-  assert.equal(runtime.mockEntries[2].addr, '0x0F000410');
+  assert.equal(runtime.mockEntries[2].addr, '0x0F000C10');
   assert.equal((await write(1, 400)).ok, true);
   assert.equal(runtime.mockEntries[1].addr, '0x0F000010');
   const map = runtime.memoryMap('0x0290').map;
   assert.equal(map.runs[0].kind, 'lumixtool');
-  assert.equal(map.runs[0].kib, 2);
+  assert.equal(map.runs[0].kib, 6);
   assert.equal(map.scannedAt, '2026-11-22T00:00:00.000Z');
   assert.equal(runtime.memoryMap('0x0280').map, null);
   const restarted = new Runtime({ configPath: runtime.configPath, legacyConfigPath: runtime.legacyConfigPath, mock: true });
@@ -140,8 +145,8 @@ test('stale guard refusal marks the allocation LumixTool-owned, stops the batch 
   assert.deepEqual(runtime.mockEntries.map(entry => entry.hex), before);
   const map = runtime.memoryMap('0x0290').map;
   assert.equal(map.runs[0].kind, 'lumixtool');
-  assert.equal(map.runs[0].kib, 2);
-  assert.equal(planAllocation(map, runtime.mockEntries, [2], 600).allocations[0].start, START + 2048);
+  assert.equal(map.runs[0].kib, 4);
+  assert.equal(planAllocation(map, runtime.mockEntries, [2], 600).allocations[0].start, START + 4096);
 });
 
 test('a later guard failure preserves earlier success and stops all remaining writes', async t => {
@@ -165,7 +170,7 @@ test('a later guard failure preserves earlier success and stops all remaining wr
   // #1's span and the refused #2 span are both LumixTool-owned now.
   const runs = runtime.memoryMap('0x0290').map.runs;
   assert.equal(runs[0].kind, 'lumixtool');
-  assert.equal(Number(runs[0].end), START + 2048);
+  assert.equal(Number(runs[0].end), START + 6144);
 });
 
 test('mock scan is read-only, takes about 3 seconds, emits a scan phase and caches by body version', async t => {
@@ -211,13 +216,20 @@ test('live writes scan first when this body has no map and pass an explicit addr
   assert.equal(runtime.memoryMap('0x0290').map.runs[0].kind, 'lumixtool');
 });
 
-test('adjacent writable runs of different kinds merge into one contiguous range', () => {
+test('adjacent writable runs of different kinds merge into one contiguous range and stale marks stay accounted', () => {
   const map = mockMemoryMap();
   const stats = memoryStats(map, [owned(1, START, 100)]);
-  // Everything except #1's 1 KiB is writable and contiguous.
-  assert.equal(stats.largestFree, END - START - 1024);
-  assert.equal(stats.totalFree, END - START - 1024);
+  // Everything except #1's 3 KiB (header + PCM + 2 KiB silent guard) is writable and contiguous.
+  assert.equal(stats.largestFree, END - START - 3072);
+  assert.equal(stats.totalFree, END - START - 3072);
   const big = planAllocation(map, [owned(1, START, 100)], [2], 132300);
   assert.equal(big.ok, true);
-  assert.equal(big.allocations[0].start, START + 1024);
+  assert.equal(big.allocations[0].start, START + 3072);
+  // After restoring #1 without rescanning, the cached 3 KiB mark is reported as staleMarked.
+  const withMark = markRange(map, START, START + 3072, 'lumixtool');
+  const restoredStats = memoryStats(withMark, []);
+  assert.equal(restoredStats.used, 0);
+  assert.equal(restoredStats.staleMarked, 3072);
+  assert.equal(restoredStats.marked, 3072);
+  assert.equal(restoredStats.totalBytes, restoredStats.marked + restoredStats.totalFree);
 });

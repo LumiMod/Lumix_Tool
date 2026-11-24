@@ -8,7 +8,7 @@
 - 音效写在相机 RAM 的一块暂存区（`0x8F000000` 起）里，写入前会检查，不会覆盖其它已写入的音效。
 - 完全本地运行，不联网。
 
-![音效替换：列出相机的 28 项音效](docs/images/sounds-list.png)
+![Windows v0.3.2 连接相机界面，演示按住回放键和 AF-ON 键时打开电源](docs/images/windows-0.3.2-connection.png)
 
 ## 功能
 
@@ -17,6 +17,7 @@
 | **音效替换** | 列出相机音效表的全部 28 项，可以单项或批量写入自定义音频，逐项或全部恢复原厂。支持 wav / mp3 / m4a / flac / ogg / opus，自动转成 44.1 kHz 单声道，最长 3 秒。 |
 | **内存诊断** | 只读扫描相机 RAM 暂存区，用分布图显示哪里空闲、哪里有数据、每个音效存在哪里，可导出 JSON。 |
 | **连接指南** | 一键安装 WinUSB 驱动、检测驱动状态、引导进入服务模式。 |
+| **片门全开（Windows v0.3.2）** | 查看 DC-S5 的 6K 和 5.9K 录制规格。此页仅供查阅，Windows 版没有解锁或还原操作。 |
 
 目前只确认了 **#1 = 半按快门对焦提示音**，其它 27 项对应哪个动作还不清楚，可以用批量写入按二分法找，方法见 [docs/SOUND_TABLE.md](docs/SOUND_TABLE.md)。找到后可以在应用里给音效改名，名称保存在本机。
 
@@ -37,20 +38,20 @@
 
 **安装与首次连接**　目前 APK 为调试版，尚未上传到 GitHub Releases。拿到 `LumixTool-debug.apk` 后，在手机上打开文件并按系统提示安装。启动 LumixTool 后点「连接相机」，跟随动画开机，通过 OTG 接好相机，并在 Android 弹窗中允许 USB 访问。
 
-## Windows 版截图
+## Windows v0.3.2 截图
 
 | | |
 |---|---|
-| ![选择音频，查看波形、预计耗时和写入地址](docs/images/sounds-write.png) | ![写入进度：单项进度与总进度](docs/images/sounds-progress.png) |
-| **准备写入**：拖入音频后显示波形、可试听，右侧显示预计耗时和计划写入的地址。 | **写入中**：显示单项和总体进度，写完提示热重启。 |
-| ![内存诊断：可写入空间与内存分布图](docs/images/memory.png) | ![连接指南：驱动状态与服务模式引导](docs/images/connection.png) |
-| **内存诊断**：只读扫描暂存区，统计可写入空间，用分布图显示各区段。 | **连接指南**：检测并一键安装驱动，引导进入服务模式。 |
+| ![音效文件的波形、音量滑块和写入准备面板](docs/images/windows-0.3.2-sounds-write.png) | ![正在写入相机时的单项进度与总体进度](docs/images/windows-0.3.2-sounds-progress.png) |
+| **准备写入**　试听音频、调整音量，再确认目标音效和预计耗时。 | **写入中**　查看当前音效和整个批次的写入进度。 |
+| ![内存诊断的空间概览及分布图](docs/images/windows-0.3.2-memory.png) | ![音效列表中的编号、名称、时长和恢复操作](docs/images/windows-0.3.2-sounds-list.png) |
+| **内存诊断**　扫描后查看可写入容量和空间分布。 | **音效列表**　从 28 项音效中选择要替换的条目，也可逐项恢复。 |
 
 界面跟随系统切换浅色 / 深色：
 
-![深色模式](docs/images/dark-mode.png)
+![Windows v0.3.2 深色模式下的音效替换界面](docs/images/windows-0.3.2-dark-mode.png)
 
-> 截图取自 Windows 版 LumixTool v0.3.1，使用模拟相机演示，已隐藏模拟调试工具栏。
+> 截图来自 Windows v0.3.2 本地打包版。音效与进度数据来自模拟相机，已隐藏模拟调试工具栏。
 
 ## Windows 版系统要求
 

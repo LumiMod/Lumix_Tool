@@ -17,6 +17,7 @@ sd_test/
 **/*.bin
 **/*.pcm
 **/*.png
+!/docs/images/*.png
 **/*.zip
 **/*.log
 handoff-repo/

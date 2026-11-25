@@ -76,3 +76,71 @@ test('Runtime.setLut works in mock mode and rejects unverified firmware', async 
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+test('vltConverter: encodeLutToBeef produces verified 2920-byte 0xBEEF layout', async () => {
+  const { convertTextToBeef, buildPresetBeef } = await import('../src/tools/lut/vltConverter.mjs');
+  const { getBeefWordMap } = await import('../src/tools/lut/beefMap.mjs');
+
+  // Minimal 2x2x2 identity .cube
+  const cubeLines = ['TITLE "Identity"', 'LUT_3D_SIZE 2'];
+  for (let b = 0; b < 2; b++) {
+    for (let g = 0; g < 2; g++) {
+      for (let r = 0; r < 2; r++) {
+        cubeLines.push(`${r}.0 ${g}.0 ${b}.0`);
+      }
+    }
+  }
+  const res = convertTextToBeef(cubeLines.join('\n'), 'id.cube');
+  assert.equal(res.bytes.length, 2920);
+  const view = new DataView(res.bytes.buffer, res.bytes.byteOffset, res.bytes.byteLength);
+  assert.equal(view.getUint32(0, true), 0x0001BEEF);
+
+  const wordMap = getBeefWordMap();
+  // Black (g=0, b=0, r=0) -> 0x00000000
+  assert.equal(view.getUint32(wordMap[(0 * 9 + 0) * 9 + 0] * 4, true), 0x00000000);
+  // White (g=8, b=8, r=8) -> (63<<12)|(63<<6)|63 = 0x0003FFFF
+  assert.equal(view.getUint32(wordMap[(8 * 9 + 8) * 9 + 8] * 4, true), 0x0003FFFF);
+  // Pure Red (g=0, b=0, r=8) -> r6=63 -> 0x0000003F
+  assert.equal(view.getUint32(wordMap[(0 * 9 + 0) * 9 + 8] * 4, true), 0x0000003F);
+  // Pure Blue (g=0, b=8, r=0) -> b6=63 -> 63<<6 = 0x00000FC0
+  assert.equal(view.getUint32(wordMap[(0 * 9 + 8) * 9 + 0] * 4, true), 0x00000FC0);
+  // Pure Green (g=8, b=0, r=0) -> g6=63 -> 63<<12 = 0x0003F000
+  assert.equal(view.getUint32(wordMap[(8 * 9 + 0) * 9 + 0] * 4, true), 0x0003F000);
+
+  const preset = buildPresetBeef('cinewarm');
+  assert.equal(preset.filename, 'CINEWARM.VLT');
+  assert.equal(preset.bytes.length, 2920);
+  const pView = new DataView(preset.bytes.buffer, preset.bytes.byteOffset, preset.bytes.byteLength);
+  assert.equal(pView.getUint32(0, true), 0x0001BEEF);
+});
+
+test('Runtime.uploadLutSlot works in mock mode and rejects invalid input or unverified firmware', async () => {
+  const { buildPresetBeef } = await import('../src/tools/lut/vltConverter.mjs');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lumix-lut-upload-'));
+  try {
+    const rt = new Runtime({
+      configPath: path.join(tmp, 'config.json'),
+      legacyConfigPath: path.join(tmp, 'legacy.json'),
+      scriptPath: path.join(__dirname, '..', 'python', 's5focus.py'),
+      mock: true,
+    });
+    const beefB64 = Buffer.from(buildPresetBeef('bw').bytes).toString('base64');
+
+    const ok = await rt.uploadLutSlot({ slot: 0, beefBase64: beefB64 });
+    assert.equal(ok.ok, true);
+    assert.equal(ok.slot, 0);
+    assert.equal(ok.bytes, 2920);
+
+    const badSlot = await rt.uploadLutSlot({ slot: 5, beefBase64: beefB64 });
+    assert.equal(badSlot.ok, false);
+
+    const badBlob = await rt.uploadLutSlot({ slot: 0, beefBase64: Buffer.alloc(16).toString('base64') });
+    assert.equal(badBlob.ok, false);
+
+    rt.configureMock({ scenario: 'unverified' });
+    const unverified = await rt.uploadLutSlot({ slot: 0, beefBase64: beefB64 });
+    assert.equal(unverified.ok, false);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});

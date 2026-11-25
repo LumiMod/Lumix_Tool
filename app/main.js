@@ -142,6 +142,7 @@ ipcMain.handle('dump', () => deviceOperation('dump', () => runtime.inspect()));
 ipcMain.handle('scan-memory', () => deviceOperation('scan-memory', () => runtime.scanMemory()));
 ipcMain.handle('set-unlock', (_event, enable) => deviceOperation('set-unlock', () => runtime.setUnlock(enable === true)));
 ipcMain.handle('set-lut', (_event, options) => deviceOperation('set-lut', () => runtime.setLut(options || {})));
+ipcMain.handle('upload-lut-slot', (_event, options) => deviceOperation('upload-lut-slot', () => runtime.uploadLutSlot(options || {})));
 ipcMain.handle('save-vlt', async (_event, { filename, content } = {}) => {
   if (typeof content !== 'string' || !content.length) return { ok: false, error: 'VLT 内容为空。' };
   const safeName = (typeof filename === 'string' && filename.trim() ? filename.trim() : 'CUSTOM.VLT');

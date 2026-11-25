@@ -425,6 +425,30 @@ def apply_lut(svc, enable, mode="fast", playback_fix=True):
     }
 
 
+def write_lut_slot(svc, slot, beef_bytes):
+    """Write a 2,920-byte 0x0001BEEF 9x9x9 LUT directly into camera RAM slot 0..4."""
+    if not isinstance(slot, int) or not 0 <= slot <= 4:
+        raise ValueError("slot must be 0..4")
+    if len(beef_bytes) != 2920 or struct.unpack_from("<I", beef_bytes, 0)[0] != 0x0001BEEF:
+        raise ValueError("invalid 0xBEEF LUT blob (must be 2920 bytes with 0x0001BEEF header)")
+    ver = read_body_version(svc)
+    if ver not in VERIFIED_BODY_VERSIONS:
+        raise UnsupportedFirmware("仅支持初代 DC-S5 (MC801) 固件 2.9")
+    ptr = struct.unpack_from("<I", read_bytes(svc, LUT_SLOTS_PTR_ADDR + slot * 4, 4), 0)[0]
+    if not 0x062B6000 <= ptr <= 0x062B9C00:
+        raise RuntimeError("LUT 槽位指针异常 (0x%08X)" % ptr)
+    target_addr = ptr | 0x80000000
+    total_hw = len(beef_bytes) // 2
+    for off in range(0, len(beef_bytes), 2):
+        write_half(svc, target_addr + off, struct.unpack_from("<H", beef_bytes, off)[0])
+        done = off // 2 + 1
+        if done % 64 == 0 or done == total_hw:
+            print("PROGRESS %d %d" % (done, total_hw), flush=True)
+    if read_bytes(svc, target_addr, len(beef_bytes)) != beef_bytes:
+        raise RuntimeError("LUT 槽位回读校验不一致")
+    return {"ok": True, "slot": slot, "addr": "0x%08X" % target_addr, "bytes": len(beef_bytes)}
+
+
 def entry_problem(raw, idx):
     """Why a 32-byte sound-table entry does not look like entry idx (None if it does)."""
     entry_id, addr = struct.unpack_from("<II", raw, 0)
@@ -641,6 +665,16 @@ def cmd_set_lut(enable, mode="fast", playback_fix=True):
         svc.close()
 
 
+def cmd_upload_lut(slot, beef_path):
+    with open(beef_path, "rb") as f:
+        data = f.read()
+    svc = protocol().Service(settle=0.002)
+    try:
+        print(json.dumps(write_lut_slot(svc, slot, data)))
+    finally:
+        svc.close()
+
+
 def cmd_scan(start=SCRATCH_START, length=SCRATCH_END - SCRATCH_START):
     """Read-only: map which 1 KiB blocks after the scratch base are free."""
     if (start % 1024 or length <= 0 or length % 1024
@@ -663,7 +697,7 @@ def cmd_scan(start=SCRATCH_START, length=SCRATCH_END - SCRATCH_START):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["status", "dump", "apply", "apply-id", "apply-slot",
-                                    "restore", "restore-id", "scan", "set-unlock", "set-lut"])
+                                    "restore", "restore-id", "scan", "set-unlock", "set-lut", "upload-lut"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     if a.cmd == "status":
@@ -693,6 +727,10 @@ def main():
         mode = a.args[1] if len(a.args) >= 2 else "fast"
         playback_fix = (a.args[2] == "1") if len(a.args) >= 3 else True
         cmd_set_lut(enable, mode=mode, playback_fix=playback_fix)
+    elif a.cmd == "upload-lut":
+        if len(a.args) != 2:
+            raise ValueError("upload-lut requires <slot 0..4> <beef-file>")
+        cmd_upload_lut(int(a.args[0]), a.args[1])
     else:
         cmd_restore_id(int(a.args[0]), a.args[1])
 

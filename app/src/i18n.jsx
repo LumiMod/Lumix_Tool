@@ -310,6 +310,11 @@ export const MESSAGES = {
     'lut.guide.cap1': '⚙ → 🖥 → V-Log查看助手 → 读取LUT文件 → 存到 SET1',
     'lut.guide.cap2': 'LUT选择 → SET1，LUT查看助手(监视器) → ON',
     'lut.guide.cap3': '按 [Q] 键 → 照片格调设为 V-Log，画质 RAW+FINE',
+    'lut.uploadingSlot': '正在直灌 LUT 到相机 RAM 槽位',
+    'lut.ramInjectTitle': '免拔卡直灌机身 RAM 槽位',
+    'lut.ramInjectNote': '不改菜单原名 · 拔电池还原',
+    'lut.ramInjectBtn': '选 .cube / .VLT 直灌当前槽位',
+    'lut.ramInjected': '已将 {name} 直灌到 {slot}！在相机里选中 {slot} 即可实时生效（菜单仍显示原槽位名）。',
   },
   en: {
     'nav.connection': 'Connect Camera',
@@ -591,6 +596,11 @@ export const MESSAGES = {
     'lut.guide.cap1': '⚙ → 🖥 → V-Log View Assist → Read LUT File → SET1',
     'lut.guide.cap2': 'LUT Select → SET1, View Assist (Monitor) → ON',
     'lut.guide.cap3': 'Press [Q] → Photo Style: V-Log, Quality: RAW+FINE',
+    'lut.uploadingSlot': 'Uploading LUT into camera RAM slot',
+    'lut.ramInjectTitle': 'Direct RAM Slot Injection (No SD Card)',
+    'lut.ramInjectNote': 'Keeps original menu name · RAM-only',
+    'lut.ramInjectBtn': 'Pick .cube / .VLT → Inject to Slot',
+    'lut.ramInjected': 'Injected {name} into {slot}! Select {slot} in camera View Assist (menu keeps its original label).',
   },
   ja: {
     'nav.connection': 'カメラ接続',
@@ -872,6 +882,11 @@ export const MESSAGES = {
     'lut.guide.cap1': '⚙ → 🖥 → V-Logビューアシスト → LUT読込 → SET1',
     'lut.guide.cap2': 'LUT選択 → SET1、LUTモニター表示 → ON',
     'lut.guide.cap3': '[Q] → フォトスタイル: V-Log、画質: RAW+FINE',
+    'lut.uploadingSlot': 'LUT をカメラ RAM スロットへ書き込み中',
+    'lut.ramInjectTitle': 'SD 不要・RAM スロット直接注入',
+    'lut.ramInjectNote': 'メニュー表示名は元のまま・RAM のみ',
+    'lut.ramInjectBtn': '.cube / .VLT を選んでスロットへ注入',
+    'lut.ramInjected': '{name} を {slot} に注入しました！カメラ側で {slot} を選べば即反映されます。',
   },
 };
 

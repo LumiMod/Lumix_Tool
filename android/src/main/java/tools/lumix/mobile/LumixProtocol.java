@@ -107,6 +107,7 @@ public final class LumixProtocol {
     public static final long LUT_LOG_ADDR = 0x8F300000L;
     public static final long LUT_VA_MON_ADDR = 0x88BDC310L;
     public static final long LUT_VA_ID_ADDR = 0x88BDC330L;
+    public static final long LUT_SLOTS_PTR_ADDR = 0x88A9D47CL;
 
     public interface Transport {
         int readHalf(long addr) throws Exception;
@@ -588,6 +589,42 @@ public final class LumixProtocol {
         out.put("mode", mode);
         out.put("playbackFix", playbackFix);
         out.put("payloadBytes", payloadBytes.length);
+        return out;
+    }
+
+    public static JSONObject writeLutSlot(Transport t, int slot, byte[] beefBytes, ProgressListener listener) throws Exception {
+        if (slot < 0 || slot > 4) {
+            throw new IllegalArgumentException("slot must be 0..4");
+        }
+        if (beefBytes == null || beefBytes.length != 2920 || u32LE(beefBytes, 0) != 0x0001BEEFL) {
+            throw new IllegalArgumentException("无效的 0xBEEF LUT 数据");
+        }
+        int ver = readBodyVersion(t);
+        if (ver != VERIFIED_BODY_VERSION) {
+            throw new UnsupportedFirmwareException("仅支持初代 DC-S5 (MC801) 固件 2.9");
+        }
+        long ptr = u32LE(readBytes(t, LUT_SLOTS_PTR_ADDR + (long) slot * 4L, 4), 0);
+        if (ptr < 0x062B6000L || ptr > 0x062B9C00L) {
+            throw new Exception("LUT 槽位指针异常: " + hexAddr(ptr));
+        }
+        long targetAddr = ptr | 0x80000000L;
+        int totalHw = beefBytes.length / 2;
+        for (int off = 0; off < beefBytes.length; off += 2) {
+            int val = (beefBytes[off] & 0xFF) | ((beefBytes[off + 1] & 0xFF) << 8);
+            t.writeHalf(targetAddr + off, val);
+            int done = off / 2 + 1;
+            if (listener != null && (done % 64 == 0 || done == totalHw)) {
+                listener.onProgress(done, totalHw);
+            }
+        }
+        if (!Arrays.equals(readBytes(t, targetAddr, beefBytes.length), beefBytes)) {
+            throw new Exception("LUT 槽位回读校验不一致");
+        }
+        JSONObject out = new JSONObject();
+        out.put("ok", true);
+        out.put("slot", slot);
+        out.put("addr", hexAddr(targetAddr));
+        out.put("bytes", beefBytes.length);
         return out;
     }
 

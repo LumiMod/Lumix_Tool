@@ -339,7 +339,8 @@ public final class CameraActivity extends Activity {
             }
 
             boolean longRunning = "scanMemory".equals(method) || "applySlots".equals(method)
-                    || "restoreSlots".equals(method) || "setUnlock".equals(method) || "setLut".equals(method);
+                    || "restoreSlots".equals(method) || "setUnlock".equals(method)
+                    || "setLut".equals(method) || "uploadLutSlot".equals(method);
             if (longRunning) setKeepScreenOn(true);
 
             JSONObject result;
@@ -363,6 +364,9 @@ public final class CameraActivity extends Activity {
                         break;
                     case "setLut":
                         result = rpcSetLut(args);
+                        break;
+                    case "uploadLutSlot":
+                        result = rpcUploadLutSlot(args);
                         break;
                     default:
                         result = new JSONObject();
@@ -837,6 +841,22 @@ public final class CameraActivity extends Activity {
                     try {
                         JSONObject p = new JSONObject();
                         p.put("phase", enable ? "lut-enable" : "lut-restore");
+                        p.put("done", done);
+                        p.put("total", total);
+                        emitProgress(p);
+                    } catch (Exception ignored) {}
+                }));
+    }
+
+    private JSONObject rpcUploadLutSlot(JSONObject args) throws Exception {
+        int slot = args.getInt("slot");
+        String b64 = args.getString("beefBase64");
+        byte[] beefBytes = Base64.decode(b64, Base64.DEFAULT);
+        return withServiceTransport(true, transport -> LumixProtocol.writeLutSlot(
+                transport, slot, beefBytes, (done, total) -> {
+                    try {
+                        JSONObject p = new JSONObject();
+                        p.put("phase", "lut-upload");
                         p.put("done", done);
                         p.put("total", total);
                         emitProgress(p);

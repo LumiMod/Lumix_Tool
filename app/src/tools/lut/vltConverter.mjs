@@ -7,6 +7,8 @@
  * - Filename: up to 8 ASCII alphanumeric chars + ".VLT" in SD card root
  */
 
+import { getBeefWordMap } from './beefMap.mjs';
+
 function clamp01(v) {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
@@ -179,4 +181,75 @@ export function buildPresetVlt(presetId) {
     }
   }
   return { filename: 'CINEWARM.VLT', content: VLT_HEADER + lines.join('\r\n') + '\r\n' };
+}
+
+export function parseVltText(text) {
+  const lines = String(text || '').split(/\r?\n/);
+  let size = 0;
+  const data = [];
+  for (const raw of lines) {
+    const line = raw.replace(/#.*$/, '').trim();
+    if (!line) continue;
+    if (line.toUpperCase().startsWith('LUT_3D_SIZE')) {
+      size = parseInt(line.split(/\s+/)[1], 10) || 0;
+      continue;
+    }
+    const parts = line.split(/\s+/);
+    if (parts.length >= 3) {
+      const r = parseInt(parts[0], 10);
+      const g = parseInt(parts[1], 10);
+      const b = parseInt(parts[2], 10);
+      if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+        data.push([clamp01(r / 4095), clamp01(g / 4095), clamp01(b / 4095)]);
+      }
+    }
+  }
+  if ((size !== 9 && size !== 17) || data.length !== size * size * size) {
+    throw new Error('无效的 .VLT 文件。');
+  }
+  return { size, title: 'VLT', data };
+}
+
+/**
+ * Encode any parsed 3D LUT into Panasonic DC-S5 native 2,920-byte 0x0001BEEF RAM format.
+ * Verified hardware layout:
+ * - Header: uint32 LE 0x0001BEEF
+ * - 729 entries mapped by exact 0x06E39EB4 octant word map
+ * - Input index order: (g * 9 + b) * 9 + r
+ * - Output 18-bit word: (g6 << 12) | (b6 << 6) | r6  (each 0..63)
+ */
+export function encodeLutToBeef(lut) {
+  const wordMap = getBeefWordMap();
+  const out = new Uint8Array(2920);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, 0x0001BEEF, true);
+
+  const to6 = v => Math.min(63, Math.max(0, Math.round(clamp01(v) * 63)));
+
+  for (let g = 0; g < 9; g++) {
+    const gf = g / 8;
+    for (let b = 0; b < 9; b++) {
+      const bf = b / 8;
+      for (let r = 0; r < 9; r++) {
+        const rf = r / 8;
+        const [ro, go, bo] = sampleCubeTrilinear(lut, rf, gf, bf);
+        const word = (to6(go) << 12) | (to6(bo) << 6) | to6(ro);
+        const hwFlat = (g * 9 + b) * 9 + r;
+        const wordIdx = wordMap[hwFlat];
+        view.setUint32(wordIdx * 4, word, true);
+      }
+    }
+  }
+  return out;
+}
+
+export function convertTextToBeef(text, filename = '') {
+  const isVlt = /\.vlt$/i.test(filename) || (/LUT_3D_SIZE\s+(?:9|17)/i.test(text) && !/\d+\.\d+/.test(text.slice(0, 800)));
+  const parsed = isVlt ? parseVltText(text) : parseCubeText(text);
+  return { bytes: encodeLutToBeef(parsed), sourceSize: parsed.size, title: parsed.title };
+}
+
+export function buildPresetBeef(presetId) {
+  const vlt = buildPresetVlt(presetId);
+  return { filename: vlt.filename, bytes: encodeLutToBeef(parseVltText(vlt.content)) };
 }

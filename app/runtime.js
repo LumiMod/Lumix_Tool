@@ -263,6 +263,41 @@ class Runtime {
     } finally { this.progressPhase = null; }
   }
 
+  async uploadLutSlot({ slot = 0, beefBase64 = '' } = {}) {
+    if (!Number.isInteger(slot) || slot < 0 || slot > 4) return { ok: false, error: 'LUT 槽位必须为 0..4。' };
+    const buf = Buffer.from(String(beefBase64 || ''), 'base64');
+    if (buf.length !== 2920 || buf.readUInt32LE(0) !== 0x0001BEEF) {
+      return { ok: false, error: '无效的 0xBEEF LUT 数据。' };
+    }
+    if (this.mock) {
+      if (this.mockState.scenario === 'unverified') {
+        return { ok: false, supported: false, error: '固件特征不匹配，仅支持初代 DC-S5 (MC801) 官方固件 2.9' };
+      }
+      if (!['connected', 'region-not-free'].includes(this.mockState.scenario)) {
+        return { ok: false, error: '模拟设备未就绪，请先连接相机。' };
+      }
+      this.progressPhase = 'lut-upload';
+      try {
+        for (let step = 1; step <= 10; step++) {
+          await new Promise(resolve => setTimeout(resolve, 40));
+          this.emitProgress({ done: step, total: 10 });
+        }
+        return { ok: true, slot, addr: hexAddress(0x862B6000 + slot * 0xC00), bytes: 2920 };
+      } finally { this.progressPhase = null; }
+    }
+    if (this.platform !== 'win32') return { ok: false, error: '实机写入需要 Windows WinUSB 环境。' };
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lumixtool-lut-'));
+    const filename = path.join(directory, 'slot.beef');
+    this.progressPhase = 'lut-upload';
+    try {
+      fs.writeFileSync(filename, buf);
+      return await this.run(['upload-lut', String(slot), filename]);
+    } finally {
+      this.progressPhase = null;
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  }
+
   renameSound({ version, index, label } = {}) {
     if (typeof version !== 'string' || !validIndex(index) || typeof label !== 'string' || label.length > 80) return { ok: false, error: '音效名称无效（最多 80 字）。' };
     const sounds = this.loadSounds();

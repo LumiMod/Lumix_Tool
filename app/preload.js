@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('api', {
   scanMemory: () => ipcRenderer.invoke('scan-memory'),
   setUnlock: enable => ipcRenderer.invoke('set-unlock', enable === true),
   setLut: options => ipcRenderer.invoke('set-lut', options),
+  uploadLutSlot: options => ipcRenderer.invoke('upload-lut-slot', options),
   saveVlt: (filename, content) => ipcRenderer.invoke('save-vlt', { filename, content }),
   memoryMap: version => ipcRenderer.invoke('memory-map', version),
   exportMemory: version => ipcRenderer.invoke('export-memory', version),

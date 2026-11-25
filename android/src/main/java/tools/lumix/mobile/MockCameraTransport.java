@@ -96,6 +96,12 @@ public final class MockCameraTransport implements LumixProtocol.Transport {
         halfwords.put(LumixProtocol.LUT_PLAYBACK_ADDR, 0xD013);
         halfwords.put(LumixProtocol.LUT_VA_MON_ADDR, 1);
         halfwords.put(LumixProtocol.LUT_VA_ID_ADDR, 1);
+        for (int s = 0; s < 5; s++) {
+            long ptr = 0x062B6000L + (long) s * 0xC00L;
+            long base = LumixProtocol.LUT_SLOTS_PTR_ADDR + (long) s * 4L;
+            halfwords.put(base, (int) (ptr & 0xFFFF));
+            halfwords.put(base + 2, (int) ((ptr >>> 16) & 0xFFFF));
+        }
     }
 
     public synchronized void setBodyVersion(int version) {

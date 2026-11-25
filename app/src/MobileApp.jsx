@@ -446,6 +446,11 @@ function MobileAppShell() {
             enable ? t('lut.enabling') : t('lut.restoring'),
             () => invokeNative('setLut', { enable, mode, playbackFix }),
           )}
+          onUploadLutSlot={({ slot, beefBase64 }) => runExclusive(
+            t('lut.uploadingSlot'),
+            () => invokeNative('uploadLutSlot', { slot, beefBase64 }),
+            false,
+          )}
           onSaveVlt={(filename, content) => invokeNative('saveVlt', { filename, content })}
         />}
 

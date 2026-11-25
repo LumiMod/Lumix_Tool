@@ -1,14 +1,20 @@
 import { Alert, Button, Card, Flex, Popconfirm, Progress, Space, Switch, Tag } from 'antd';
 import {
-  ArrowLeftOutlined, BgColorsOutlined, CheckCircleFilled, DownloadOutlined,
-  EyeOutlined, FolderOpenOutlined, PlaySquareOutlined, RightOutlined,
+  ArrowLeftOutlined, BgColorsOutlined, CheckCircleFilled, CloudUploadOutlined,
+  DownloadOutlined, EyeOutlined, FolderOpenOutlined, PlaySquareOutlined, RightOutlined,
   ThunderboltOutlined, UndoOutlined, UsbOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
 import LutGuide from './LutGuide';
-import { buildPresetVlt, convertCubeToVlt } from './vltConverter.mjs';
+import { buildPresetBeef, buildPresetVlt, convertCubeToVlt, convertTextToBeef } from './vltConverter.mjs';
 import './LutDirect.css';
+
+function bytesToBase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
 
 function downloadBlobFallback(filename, content) {
   const blob = new Blob([content], { type: 'application/octet-stream' });
@@ -30,16 +36,19 @@ export default function LutDirect({
   progress = null,
   onOpenConnect = null,
   onSetLut = null,
+  onUploadLutSlot = null,
   onSaveVlt = null,
 }) {
   const { t } = useI18n();
   const [subView, setSubView] = useState(null); // null | 'guide' | 'vlt'
   const [mode, setMode] = useState('fast');
   const [playbackFix, setPlaybackFix] = useState(true);
+  const [targetSlot, setTargetSlot] = useState(0); // 0=Vlog_709, 1..4=SET1..4
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [error, setError] = useState('');
   const [vltMsg, setVltMsg] = useState(null);
   const fileInputRef = useRef(null);
+  const ramInputRef = useRef(null);
 
   // Normalize Desktop vs Mobile state
   const api = mobile ? null : device?.api;
@@ -115,6 +124,52 @@ export default function LutDirect({
     }
   }
 
+  async function uploadBeefToSlot(beefBytes, label) {
+    if (disabled) return;
+    setVltMsg(null);
+    if (!connected || !supported) {
+      setVltMsg({ type: 'error', text: t('lut.notConnectedTitle') });
+      return;
+    }
+    try {
+      const beefBase64 = bytesToBase64(beefBytes);
+      let res;
+      if (mobile) {
+        if (!onUploadLutSlot) return;
+        res = await onUploadLutSlot({ slot: targetSlot, beefBase64 });
+      } else {
+        if (!api?.uploadLutSlot) return;
+        res = await device.runOperation({
+          tool: 'lut-direct',
+          label: t('lut.uploadingSlot'),
+          execute: () => api.uploadLutSlot({ slot: targetSlot, beefBase64 }),
+        });
+      }
+      if (!res?.ok) {
+        setVltMsg({ type: 'error', text: res?.error || t('lut.opFailed') });
+      } else {
+        const slotName = targetSlot === 0 ? 'Vlog_709' : `SET${targetSlot}`;
+        setVltMsg({ type: 'success', text: t('lut.ramInjected', { name: label, slot: slotName }) });
+      }
+    } catch (err) {
+      setVltMsg({ type: 'error', text: err.message || String(err) });
+    }
+  }
+
+  async function onPickRamLut(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setVltMsg(null);
+    try {
+      const text = await file.text();
+      const { bytes } = convertTextToBeef(text, file.name);
+      await uploadBeefToSlot(bytes, file.name);
+    } catch (err) {
+      setVltMsg({ type: 'error', text: err.message || String(err) });
+    }
+  }
+
   // Level-3 Sub-view: Authentic DC-S5 Animated Menu Simulator
   if (subView === 'guide') {
     const body = (
@@ -143,32 +198,81 @@ export default function LutDirect({
         </div>
 
         <input ref={fileInputRef} type="file" accept=".cube,.CUBE" style={{ display: 'none' }} onChange={onPickCube} />
+        <input ref={ramInputRef} type="file" accept=".cube,.CUBE,.vlt,.VLT" style={{ display: 'none' }} onChange={onPickRamLut} />
 
-        {mobile ? (
-          <button type="button" className="btn btn-primary" style={{ width: '100%' }} onClick={() => fileInputRef.current?.click()}>
-            <FolderOpenOutlined /> {t('lut.convertCubeBtn')}
-          </button>
-        ) : (
-          <Button type="primary" block size="large" icon={<FolderOpenOutlined />} onClick={() => fileInputRef.current?.click()}>
-            {t('lut.convertCubeBtn')}
-          </Button>
-        )}
+        {/* Option 4: Direct Service USB RAM LUT Slot Injection */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <strong style={{ fontSize: 13 }}><CloudUploadOutlined /> {t('lut.ramInjectTitle')}</strong>
+            <span style={{ fontSize: 11, opacity: 0.65 }}>{t('lut.ramInjectNote')}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {[0, 1, 2, 3, 4].map(s => (
+              <button
+                key={s}
+                type="button"
+                className={'s5-guide__step' + (targetSlot === s ? ' is-active' : '')}
+                style={{ padding: '4px 10px' }}
+                disabled={disabled}
+                onClick={() => setTargetSlot(s)}
+              >
+                {s === 0 ? 'Vlog_709' : `SET${s}`}
+              </button>
+            ))}
+          </div>
+          {mobile ? (
+            <button type="button" className="btn btn-primary" style={{ width: '100%' }} disabled={disabled || !connected || !supported} onClick={() => ramInputRef.current?.click()}>
+              <CloudUploadOutlined /> {t('lut.ramInjectBtn')}
+            </button>
+          ) : (
+            <Button type="primary" block size="large" icon={<CloudUploadOutlined />} loading={working} disabled={disabled || !connected || !supported} onClick={() => ramInputRef.current?.click()}>
+              {t('lut.ramInjectBtn')}
+            </Button>
+          )}
+          <div className="lut-presets">
+            <button type="button" className="lut-preset" disabled={disabled || !connected || !supported} onClick={() => { const p = buildPresetBeef('cinewarm'); uploadBeefToSlot(p.bytes, 'CineWarm'); }}>
+              <div className="lut-preset__swatch is-cine" />
+              <div className="lut-preset__body">
+                <span>CineWarm → RAM</span>
+                <CloudUploadOutlined />
+              </div>
+            </button>
+            <button type="button" className="lut-preset" disabled={disabled || !connected || !supported} onClick={() => { const p = buildPresetBeef('bw'); uploadBeefToSlot(p.bytes, 'B&W HC'); }}>
+              <div className="lut-preset__swatch is-bw" />
+              <div className="lut-preset__body">
+                <span>B&amp;W → RAM</span>
+                <CloudUploadOutlined />
+              </div>
+            </button>
+          </div>
+        </div>
 
-        <div className="lut-presets">
-          <button type="button" className="lut-preset" onClick={() => { const p = buildPresetVlt('cinewarm'); saveVltFile(p.filename, p.content); }}>
-            <div className="lut-preset__swatch is-cine" />
-            <div className="lut-preset__body">
-              <span>CINEWARM.VLT</span>
-              <DownloadOutlined />
-            </div>
-          </button>
-          <button type="button" className="lut-preset" onClick={() => { const p = buildPresetVlt('bw'); saveVltFile(p.filename, p.content); }}>
-            <div className="lut-preset__swatch is-bw" />
-            <div className="lut-preset__body">
-              <span>BWHC.VLT</span>
-              <DownloadOutlined />
-            </div>
-          </button>
+        {/* SD Card .VLT export fallback */}
+        <div style={{ borderTop: '1px solid rgba(128,128,128,0.2)', paddingTop: 12 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {mobile ? (
+              <>
+                <button type="button" className="btn" style={{ flex: 1 }} onClick={() => fileInputRef.current?.click()}>
+                  <FolderOpenOutlined /> {t('lut.convertCubeBtn')}
+                </button>
+                <button type="button" className="btn" onClick={() => { const p = buildPresetVlt('cinewarm'); saveVltFile(p.filename, p.content); }}>
+                  <DownloadOutlined /> .VLT
+                </button>
+              </>
+            ) : (
+              <>
+                <Button icon={<FolderOpenOutlined />} onClick={() => fileInputRef.current?.click()}>
+                  {t('lut.convertCubeBtn')}
+                </Button>
+                <Button icon={<DownloadOutlined />} onClick={() => { const p = buildPresetVlt('cinewarm'); saveVltFile(p.filename, p.content); }}>
+                  CINEWARM.VLT
+                </Button>
+                <Button icon={<DownloadOutlined />} onClick={() => { const p = buildPresetVlt('bw'); saveVltFile(p.filename, p.content); }}>
+                  BWHC.VLT
+                </Button>
+              </>
+            )}
+          </div>
         </div>
 
         <p className="lut-foot-note" style={{ marginTop: 12 }}>{t('lut.vltRuleHint')}</p>

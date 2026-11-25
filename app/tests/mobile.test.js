@@ -90,6 +90,20 @@ test('mobileApi encodes PCM, scans uncached memory, allocates slots, and renders
     const homeHtml = renderToStaticMarkup(React.createElement(MobileApp));
     assert.match(homeHtml, /片门全开解锁/);
     assert.match(homeHtml, /相机音效替换/);
+    assert.match(homeHtml, /给作者赞赏/);
+    assert.match(homeHtml, /id="btnSupportAuthor"/);
+
+    const openRes = await mobileApi.openExternal();
+    assert.equal(openRes.ok, true);
+    assert.deepEqual(calls.at(-1), {
+      method: 'openExternal',
+      args: { url: 'https://github.com/USER-HFC/Lumix_Tool' },
+    });
+
+    const { default: Settings } = await server.ssrLoadModule('/src/components/Settings.jsx');
+    const settingsHtml = renderToStaticMarkup(React.createElement(Settings, { device: { env: {}, locked: false, api: {} } }));
+    assert.match(settingsHtml, /给作者赞赏/);
+    assert.match(settingsHtml, /id="btnSettingsStar"/);
 
     globalThis.history = { state: { tool: 'camera' } };
     const cameraHtml = renderToStaticMarkup(React.createElement(MobileApp));

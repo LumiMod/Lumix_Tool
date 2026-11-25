@@ -1,13 +1,23 @@
 import { useState } from 'react';
 import { Alert, Button, Card, Descriptions, Flex, Input, Space, Tag, Typography } from 'antd';
-import { FolderOpenOutlined } from '@ant-design/icons';
+import { FolderOpenOutlined, GithubOutlined, StarOutlined } from '@ant-design/icons';
 
 export default function Settings({ device }) {
   const [feedback, setFeedback] = useState(null);
+  const [starError, setStarError] = useState('');
   const { env, locked } = device;
   async function choosePython() {
     const result = await device.pickPython();
     if (result) setFeedback(result);
+  }
+  async function openGithub() {
+    setStarError('');
+    try {
+      const result = await device.api?.openGithub?.();
+      if (result && result.ok === false) setStarError(result.error || '无法打开 GitHub 链接。');
+    } catch (error) {
+      setStarError(error.message || String(error));
+    }
   }
   return <Space orientation="vertical" size="large" className="full-width">
     <div><Typography.Title level={2}>设置</Typography.Title><Typography.Text type="secondary">管理本机运行环境与应用信息。</Typography.Text></div>
@@ -29,6 +39,15 @@ export default function Settings({ device }) {
         { key: 'theme', label: '外观', children: '跟随系统 · 浅色 / 深色' },
         { key: 'data', label: '设置目录', children: <Typography.Text className="break-text">{env?.userData || '正在检测…'}</Typography.Text> },
       ]} />
+    </Card>
+    <Card title="给作者赞赏" extra={<Tag icon={<StarOutlined />} color="gold">GitHub Star</Tag>}>
+      <Space orientation="vertical" size="middle" className="full-width">
+        <Typography.Text type="secondary">LumixTool 完全免费开源。如果它帮到了你，欢迎前往 GitHub 仓库给作者点个 Star 支持继续维护！</Typography.Text>
+        <div>
+          <Button id="btnSettingsStar" type="primary" icon={<GithubOutlined />} onClick={openGithub}>前往 GitHub 点亮 Star</Button>
+        </div>
+        {starError && <Alert showIcon type="error" title={starError} />}
+      </Space>
     </Card>
   </Space>;
 }

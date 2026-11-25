@@ -37,6 +37,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class CameraActivity extends Activity {
     private static final String PERMISSION = "tools.lumix.mobile.USB_PERMISSION";
+    static final String GITHUB_URL = "https://github.com/USER-HFC/Lumix_Tool";
+
+    static boolean isAllowedExternalUrl(String url) {
+        return GITHUB_URL.equals(url);
+    }
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean operationLock = new AtomicBoolean(false);
@@ -162,6 +167,39 @@ public final class CameraActivity extends Activity {
     }
 
     private void handleRpc(String requestId, String method, String payloadJson) {
+        if ("openExternal".equals(method)) {
+            try {
+                JSONObject args = parsePayload(payloadJson);
+                String url = args.optString("url", "");
+                if (!isAllowedExternalUrl(url)) {
+                    JSONObject err = new JSONObject();
+                    err.put("ok", false);
+                    err.put("error", "不允许打开此链接。");
+                    final JSONObject out = err;
+                    runOnUiThread(() -> web.resolve(requestId, out));
+                    return;
+                }
+                runOnUiThread(() -> {
+                    JSONObject res = new JSONObject();
+                    try {
+                        Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                .addCategory(Intent.CATEGORY_BROWSABLE);
+                        startActivity(view);
+                        res.put("ok", true);
+                    } catch (Exception e) {
+                        putError(res, e);
+                    }
+                    web.resolve(requestId, res);
+                });
+            } catch (Exception e) {
+                JSONObject err = new JSONObject();
+                putError(err, e);
+                final JSONObject out = err;
+                runOnUiThread(() -> web.resolve(requestId, out));
+            }
+            return;
+        }
+
         if ("setMock".equals(method)) {
             executor.execute(() -> {
                 JSONObject res = new JSONObject();

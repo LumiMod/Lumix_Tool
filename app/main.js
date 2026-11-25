@@ -129,8 +129,12 @@ ipcMain.handle('status', () => deviceOperation('status', () => runtime.inspect()
 ipcMain.handle('driver-status', () => deviceOperation('driver-status', () => runtime.driverStatus()));
 ipcMain.handle('driver-install', () => deviceOperation('driver-install', () => runtime.installDriver()));
 ipcMain.handle('driver-uninstall', (_event, options) => deviceOperation('driver-uninstall', () => runtime.uninstallDriver({ removeCertificate: options?.removeCertificate === true })));
+const ALLOWED_EXTERNAL_URLS = new Set([
+  'https://zadig.akeo.ie/',
+  'https://github.com/USER-HFC/Lumix_Tool',
+]);
 ipcMain.handle('open-external', async (_event, url) => {
-  if (url !== 'https://zadig.akeo.ie/') return { ok: false, error: '不允许打开此链接。' };
+  if (!ALLOWED_EXTERNAL_URLS.has(url)) return { ok: false, error: '不允许打开此链接。' };
   try { await shell.openExternal(url); return { ok: true }; }
   catch (error) { return { ok: false, error: error.message }; }
 });

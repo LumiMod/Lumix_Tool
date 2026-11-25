@@ -43,7 +43,21 @@ body { background: #fff; }
 }
 .desktop-rail .rail-menu .ant-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .desktop-rail .rail-menu .ant-menu-item-divider { margin: 15px 8px; border-color: var(--stroke); }
-.sidebar-footer { display: flex; align-items: center; justify-content: space-between; margin: auto 18px 0; padding: 14px 0; color: var(--subtle); font-size: 12px; }
+.sidebar-bottom { margin-top: auto; padding: 10px 10px 0; }
+.sidebar-support {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px;
+  border: 1px solid var(--stroke); border-radius: 6px; background: var(--panel);
+  color: var(--ink); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.sidebar-support:hover { background: var(--tint); border-color: var(--accent); }
+.sidebar-support:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sidebar-support__icon { color: #d97706; font-size: 15px; }
+.sidebar-support__tag {
+  margin-left: auto; padding: 1px 6px; border-radius: 999px;
+  background: var(--tint); color: var(--on-tint); font-size: 11px; font-weight: 600;
+}
+.sidebar-footer { display: flex; align-items: center; justify-content: space-between; margin: 0 8px; padding: 12px 0 14px; color: var(--subtle); font-size: 12px; }
 .sidebar-footer span:last-child { font-variant-numeric: tabular-nums; }
 .app-shell .desktop-main { min-width: 0; background: var(--paper); }
 .app-shell .device-header {
@@ -90,6 +104,7 @@ body { background: #fff; }
     --subtle: #b9c1c9; --stroke: #454a50; --tint: #213b53;
     --on-tint: #c3e3ff; --accent: #83c4ff; --hover: #30353a;
   }
+  .sidebar-support__icon { color: #fbbf24; }
 }
 @media (max-width: 1080px) {
   .app-shell .desktop-rail { flex: 0 0 176px !important; width: 176px !important; min-width: 176px !important; max-width: 176px !important; }

@@ -5,7 +5,7 @@ import {
   ArrowLeftOutlined, CheckCircleFilled, CloudUploadOutlined, DownloadOutlined,
   EditOutlined, ExpandOutlined, FolderOpenOutlined, PauseOutlined,
   PlayCircleOutlined, ReloadOutlined, RightOutlined, ScanOutlined,
-  SoundOutlined, UndoOutlined, UsbOutlined, WarningOutlined,
+  SoundOutlined, StarOutlined, UndoOutlined, UsbOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import OpenGate from './tools/OpenGate';
 import { decodeAudio, MAX_SECONDS } from './tools/focus-sound/audio.mjs';
@@ -13,7 +13,7 @@ import Waveform from './tools/focus-sound/Waveform';
 import { catalog, soundName } from './tools/sounds/catalog';
 import { slotState } from './tools/sounds/state.mjs';
 import { BLOCK, liveRegions, memoryStats, planAllocation } from '../memory.mjs';
-import { applySoundBatch, invokeNative, restoreSoundBatch } from './mobileApi';
+import { applySoundBatch, GITHUB_REPO_URL, invokeNative, openExternal, restoreSoundBatch } from './mobileApi';
 import MobileButtonGuide from './MobileButtonGuide';
 import './mobile.css';
 
@@ -78,6 +78,7 @@ export default function MobileApp() {
   const [editingText, setEditingText] = useState('');
   const [confirmRestoreTarget, setConfirmRestoreTarget] = useState(undefined);
   const [showAdvancedMem, setShowAdvancedMem] = useState(false);
+  const [linkError, setLinkError] = useState('');
 
   const { playing, stopPreview, preview } = useAudioPreview();
 
@@ -256,6 +257,14 @@ export default function MobileApp() {
     setSelected(prev => (prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index].sort((a, b) => a - b)));
   }
 
+  async function handleSupportAuthor() {
+    setLinkError('');
+    const res = await openExternal(GITHUB_REPO_URL);
+    if (res && res.ok === false) {
+      setLinkError(res.error || '无法打开浏览器，请手动访问 GitHub 仓库');
+    }
+  }
+
   const entryByIndex = new Map(entries.map(e => [e.index, e]));
   const focusRow = { ...catalog[1], ...entryByIndex.get(1) };
   const focusState = slotState(focusRow, originals[1]);
@@ -338,6 +347,25 @@ export default function MobileApp() {
               openTool={openTool}
             />
           </div>
+
+          <div className="menu-card">
+            <button id="btnSupportAuthor" type="button" className="menu-item" onClick={handleSupportAuthor}>
+              <span className="menu-icon is-star" aria-hidden="true"><StarOutlined /></span>
+              <span className="menu-copy">
+                <span className="menu-copy__top">
+                  <strong>给作者赞赏</strong>
+                  <em className="menu-badge is-star">点 Star</em>
+                </span>
+                <small>开源免费 · 前往 GitHub 点亮 Star 支持作者</small>
+              </span>
+              <RightOutlined className="menu-arrow" aria-hidden="true" />
+            </button>
+          </div>
+
+          {linkError && <div role="alert" className="notice-bar is-error">
+            <WarningOutlined />
+            <span>{linkError}</span>
+          </div>}
         </nav>}
 
         {/* 连接相机页 */}

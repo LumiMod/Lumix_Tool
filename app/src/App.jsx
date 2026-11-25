@@ -1,5 +1,5 @@
 import { Alert, Badge, Button, Checkbox, ConfigProvider, Flex, Layout, Menu, Select, Space, Typography, theme } from 'antd';
-import { AimOutlined, ExperimentOutlined, ReloadOutlined, SettingOutlined, UsbOutlined } from '@ant-design/icons';
+import { AimOutlined, ExperimentOutlined, ReloadOutlined, SettingOutlined, StarOutlined, UsbOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState } from 'react';
 import './styles.css';
 import './components/ConnectionGuide.css';
@@ -33,6 +33,7 @@ export default function App() {
 function DesktopApp() {
   const device = useDevice(window.api);
   const [chosenPage, setPage] = useState(null);
+  const [linkError, setLinkError] = useState('');
   const page = chosenPage ?? 'connection';
   const workspace = useRef(null);
   useEffect(() => { workspace.current?.scrollTo(0, 0); }, [page]);
@@ -53,13 +54,30 @@ function DesktopApp() {
     { key: 'settings', id: 'navSettings', icon: <SettingOutlined />, label: '设置' },
   ];
 
+  async function openGithub() {
+    setLinkError('');
+    try {
+      const result = await device.api?.openGithub?.();
+      if (result && result.ok === false) setLinkError(result.error || '无法打开 GitHub 链接。');
+    } catch (error) {
+      setLinkError(error.message || String(error));
+    }
+  }
+
   return <Layout className="app-shell">
     <Sider width={200} className="desktop-rail">
       <div className="sidebar-content">
         <div className="desktop-brand"><span className="brand-icon" aria-hidden="true"><AimOutlined /></span><span>Lumix<span className="brand-light">Tool</span></span></div>
         <nav aria-label="工具导航"><Menu mode="inline" className="rail-menu" inlineIndent={14}
           selectedKeys={[page]} items={menuItems} onClick={({ key }) => setPage(key)} /></nav>
-        <div className="sidebar-footer"><span>本地运行</span><span>v{__APP_VERSION__}</span></div>
+        <div className="sidebar-bottom">
+          <button type="button" id="btnSupportAuthor" className="sidebar-support" title="前往 GitHub 点亮 Star 支持作者" onClick={openGithub}>
+            <StarOutlined className="sidebar-support__icon" aria-hidden="true" />
+            <span>给作者赞赏</span>
+            <span className="sidebar-support__tag">Star</span>
+          </button>
+          <div className="sidebar-footer"><span>本地运行</span><span>v{__APP_VERSION__}</span></div>
+        </div>
       </div>
     </Sider>
     <Layout className="desktop-main">
@@ -78,6 +96,7 @@ function DesktopApp() {
         <div className="page-content">
           {env?.mock && <MockToolbar device={device} />}
           {device.error && <Alert type="error" showIcon title={device.error} className="page-notice" />}
+          {linkError && <Alert type="error" showIcon closable title={linkError} onClose={() => setLinkError('')} className="page-notice" />}
           {selectedTool && <>
             <div className="page-heading"><div><Title level={2}>{selectedTool.title}</Title><Text type="secondary">{selectedTool.description}</Text></div>
               <span className="page-scope">{selectedTool.scope || 'LUMIX'}</span>

@@ -12,8 +12,20 @@ if (typeof window !== 'undefined') {
   };
 }
 
+export const GITHUB_REPO_URL = 'https://github.com/USER-HFC/Lumix_Tool';
+
 export function hasNativeBridge() {
   return typeof window !== 'undefined' && typeof window.LumixAndroid?.invoke === 'function';
+}
+
+export function openExternal(url = GITHUB_REPO_URL) {
+  if (hasNativeBridge()) {
+    return invokeNative('openExternal', { url });
+  }
+  if (typeof window !== 'undefined' && typeof window.open === 'function') {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+  return Promise.resolve({ ok: true });
 }
 
 export function invokeNative(method, payload = {}) {

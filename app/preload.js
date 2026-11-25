@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   installDriver: () => ipcRenderer.invoke('driver-install'),
   uninstallDriver: options => ipcRenderer.invoke('driver-uninstall', options),
   openZadig: () => ipcRenderer.invoke('open-external', 'https://zadig.akeo.ie/'),
+  openGithub: () => ipcRenderer.invoke('open-external', 'https://github.com/USER-HFC/Lumix_Tool'),
   readFile: path => ipcRenderer.invoke('read-file', path),
   pathForFile: file => webUtils.getPathForFile(file),
   apply: (pcm, samples) => ipcRenderer.invoke('apply', { pcm, samples }),

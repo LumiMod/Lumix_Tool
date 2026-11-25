@@ -171,4 +171,14 @@ public class LumixProtocolTest {
             assertEquals(0x4628, cam.readHalf(0x868261B6L));
         }
     }
+
+    @Test
+    public void externalUrlAllowlistPermitsOnlyGithubRepo() {
+        assertTrue(CameraActivity.isAllowedExternalUrl("https://github.com/USER-HFC/Lumix_Tool"));
+        assertFalse(CameraActivity.isAllowedExternalUrl("http://github.com/USER-HFC/Lumix_Tool"));
+        assertFalse(CameraActivity.isAllowedExternalUrl("https://github.com/USER-HFC/Lumix_Tool/evil"));
+        assertFalse(CameraActivity.isAllowedExternalUrl("https://example.com"));
+        assertFalse(CameraActivity.isAllowedExternalUrl(""));
+        assertFalse(CameraActivity.isAllowedExternalUrl(null));
+    }
 }

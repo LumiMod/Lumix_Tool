@@ -190,15 +190,16 @@ test('driver IPC shares the camera lock in both directions and sanitizes uninsta
 
 test('external links use an exact main-process allowlist', async () => {
   const { handlers, calls } = await launch();
-  for (const url of ['http://zadig.akeo.ie/', 'https://zadig.akeo.ie', 'https://zadig.akeo.ie/evil', 'https://zadig.akeo.ie.evil/', 'file:///tmp/evil', null]) {
+  for (const url of ['http://zadig.akeo.ie/', 'https://zadig.akeo.ie', 'https://zadig.akeo.ie/evil', 'https://zadig.akeo.ie.evil/', 'http://github.com/USER-HFC/Lumix_Tool', 'https://github.com/USER-HFC/Lumix_Tool/evil', 'https://github.com/USER-HFC/Lumix_Tool/', 'file:///tmp/evil', null]) {
     assert.equal((await handlers.get('open-external')({}, url)).ok, false);
   }
   assert.equal(calls.length, 0);
   assert.equal((await handlers.get('open-external')({}, 'https://zadig.akeo.ie/')).ok, true);
-  assert.deepEqual(calls, ['https://zadig.akeo.ie/']);
+  assert.equal((await handlers.get('open-external')({}, 'https://github.com/USER-HFC/Lumix_Tool')).ok, true);
+  assert.deepEqual(calls, ['https://zadig.akeo.ie/', 'https://github.com/USER-HFC/Lumix_Tool']);
 });
 
-test('preload exposes explicit driver methods and fixes the Zadig URL', () => {
+test('preload exposes explicit driver methods and fixes the Zadig and GitHub URLs', () => {
   let api;
   const calls = [];
   const electron = {
@@ -206,12 +207,13 @@ test('preload exposes explicit driver methods and fixes the Zadig URL', () => {
     ipcRenderer: { invoke: (...args) => { calls.push(args); } }, webUtils: {},
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../preload.js'), 'utf8'), { require: () => electron });
-  api.driverStatus(); api.installDriver(); api.uninstallDriver({ removeCertificate: true }); api.openZadig('https://evil.example/');
+  api.driverStatus(); api.installDriver(); api.uninstallDriver({ removeCertificate: true }); api.openZadig('https://evil.example/'); api.openGithub('https://evil.example/');
   assert.equal(calls[0][0], 'driver-status');
   assert.equal(calls[1][0], 'driver-install');
   assert.equal(calls[2][0], 'driver-uninstall');
   assert.equal(calls[2][1].removeCertificate, true);
   assert.deepEqual(calls[3], ['open-external', 'https://zadig.akeo.ie/']);
+  assert.deepEqual(calls[4], ['open-external', 'https://github.com/USER-HFC/Lumix_Tool']);
 });
 
 test('Vite development HTML keeps refresh scripts external and only adds the local WebSocket origin', async () => {

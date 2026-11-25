@@ -110,6 +110,13 @@ test('mobileApi encodes PCM, scans uncached memory, allocates slots, and renders
     assert.match(cameraHtml, /guide-ring/);
     assert.match(cameraHtml, /回放 ▶/);
     assert.match(cameraHtml, /AF-ON/);
+
+    globalThis.history = { state: { tool: 'audio' } };
+    const audioHtml = renderToStaticMarkup(React.createElement(MobileApp));
+    assert.match(audioHtml, /常用音效/);
+    assert.match(audioHtml, /对焦提示音/);
+    assert.match(audioHtml, /电子快门·单张/);
+    assert.match(audioHtml, /自拍倒计时/);
     delete globalThis.history;
   } finally {
     delete globalThis.window;

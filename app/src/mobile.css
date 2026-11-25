@@ -508,26 +508,93 @@ html, body {
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
-.focus-slot-box {
+.preset-list {
+  display: grid;
+  gap: 8px;
+}
+.preset-card {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 12px;
-  background: var(--blue-soft);
-  border: 1px solid var(--blue-line);
+  gap: 10px;
+  padding: 12px 13px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: #fcfdff;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
 }
-.focus-slot-box strong {
-  display: block;
-  font-size: 14.5px;
+.preset-card.is-active {
+  background: var(--blue-soft);
+  border-color: var(--blue-line);
+}
+.preset-radio {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  box-sizing: border-box;
+  position: relative;
+}
+.preset-card.is-active .preset-radio {
+  border-color: var(--blue);
+}
+.preset-card.is-active .preset-radio::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+.preset-copy {
+  flex: 1;
+  min-width: 0;
+}
+.preset-copy__top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.preset-copy strong {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.preset-card.is-active .preset-copy strong {
   color: #1e3a8a;
 }
-.focus-slot-box small {
+.preset-nums {
+  font: 600 11.5px/1 ui-monospace, monospace;
+  color: var(--muted);
+}
+.preset-copy small {
   display: block;
   margin-top: 2px;
-  font-size: 12.5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.preset-card.is-active .preset-copy small {
   color: #3b82f6;
+}
+.slot-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.slot-copy__top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.slot-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quick-pills {

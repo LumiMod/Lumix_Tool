@@ -10,7 +10,7 @@ import {
 import OpenGate from './tools/OpenGate';
 import { decodeAudio, MAX_SECONDS } from './tools/focus-sound/audio.mjs';
 import Waveform from './tools/focus-sound/Waveform';
-import { catalog, soundName } from './tools/sounds/catalog';
+import { catalog, COMMON_PRESETS, orderedCatalog, soundName } from './tools/sounds/catalog';
 import { slotState } from './tools/sounds/state.mjs';
 import { BLOCK, liveRegions, memoryStats, planAllocation } from '../memory.mjs';
 import { applySoundBatch, GITHUB_REPO_URL, invokeNative, openExternal, restoreSoundBatch } from './mobileApi';
@@ -68,7 +68,8 @@ export default function MobileApp() {
   const busyRef = useRef(false);
 
   // Audio page state
-  const [slotTab, setSlotTab] = useState('focus'); // 'focus' | 'all'
+  const [slotTab, setSlotTab] = useState('common'); // 'common' | 'all'
+  const [presetId, setPresetId] = useState(COMMON_PRESETS[0].id);
   const [selected, setSelected] = useState([1]);
   const [audio, setAudio] = useState(null);
   const [audioError, setAudioError] = useState('');
@@ -153,10 +154,11 @@ export default function MobileApp() {
   const memoryMap = device?.memoryMap || null;
   const live = liveRegions(entries);
   const stats = memoryStats(memoryMap, entries);
-  const activeIndices = slotTab === 'focus' ? [1] : selected;
+  const activePreset = COMMON_PRESETS.find(p => p.id === presetId) || COMMON_PRESETS[0];
+  const activeIndices = slotTab === 'common' ? activePreset.indices : selected;
   const plan = audio && activeIndices.length ? planAllocation(memoryMap, entries, activeIndices, audio.samples) : null;
 
-  useEffect(() => { setBurnResult(null); }, [slotTab, selected]);
+  useEffect(() => { setBurnResult(null); }, [slotTab, presetId, selected]);
 
   async function exitMock() {
     if (isBusy) return;
@@ -217,7 +219,7 @@ export default function MobileApp() {
     if (isBusy || !ready || firmwareBlocked) return;
     setConfirmRestoreTarget(undefined);
     setBurnResult(null);
-    const indices = target == null ? null : [target];
+    const indices = target == null ? null : Array.isArray(target) ? target : [target];
     const response = await runExclusive('正在恢复原厂音效…', () => restoreSoundBatch({
       indices,
       version: soundTable.version,
@@ -266,9 +268,7 @@ export default function MobileApp() {
   }
 
   const entryByIndex = new Map(entries.map(e => [e.index, e]));
-  const focusRow = { ...catalog[1], ...entryByIndex.get(1) };
-  const focusState = slotState(focusRow, originals[1]);
-  const allRows = catalog.map(item => ({ ...item, ...entryByIndex.get(item.index) }));
+  const allRows = orderedCatalog.map(item => ({ ...item, ...entryByIndex.get(item.index) }));
 
   const pct = progress && progress.total > 0
     ? Math.min(100, Math.max(0, Math.round((progress.done / progress.total) * 100)))
@@ -460,11 +460,11 @@ export default function MobileApp() {
                   type="button"
                   role="tab"
                   disabled={isBusy}
-                  aria-selected={slotTab === 'focus'}
-                  className={slotTab === 'focus' ? 'is-active' : ''}
-                  onClick={() => setSlotTab('focus')}
+                  aria-selected={slotTab === 'common'}
+                  className={slotTab === 'common' ? 'is-active' : ''}
+                  onClick={() => setSlotTab('common')}
                 >
-                  对焦音
+                  常用音效
                 </button>
                 <button
                   type="button"
@@ -479,28 +479,58 @@ export default function MobileApp() {
               </div>
             </div>
 
-            {slotTab === 'focus' ? (
-              <div className="focus-slot-box">
-                <div>
-                  <strong>半按快门对焦提示音</strong>
-                  <small>当前状态：{focusState}</small>
-                </div>
-                {ready && originals[1] && focusState === '已替换' && (
-                  <button
-                    type="button"
-                    className="ghost-btn is-compact"
-                    disabled={isBusy || firmwareBlocked}
-                    onClick={() => setConfirmRestoreTarget(1)}
+            {slotTab === 'common' ? (
+              <div className="preset-list" role="radiogroup" aria-label="常用音效">
+                {COMMON_PRESETS.map(preset => {
+                  const isActive = preset.id === activePreset.id;
+                  const states = preset.indices.map(i => slotState({ ...catalog[i], ...entryByIndex.get(i) }, originals[i]));
+                  const replacedIndices = preset.indices.filter((i, idx) => states[idx] === '已替换' && originals[i]);
+                  const stateLabel = states.every(s => s === '已替换')
+                    ? '已替换'
+                    : states.some(s => s === '已替换')
+                      ? '部分已替换'
+                      : states.every(s => s === '原厂')
+                        ? '原厂'
+                        : '未读取';
+                  return <div
+                    key={preset.id}
+                    className={'preset-card' + (isActive ? ' is-active' : '')}
+                    role="radio"
+                    aria-checked={isActive}
+                    tabIndex={isBusy ? -1 : 0}
+                    onClick={() => { if (!isBusy) setPresetId(preset.id); }}
+                    onKeyDown={e => { if (!isBusy && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setPresetId(preset.id); } }}
                   >
-                    <UndoOutlined />恢复默认
-                  </button>
-                )}
+                    <span className="preset-radio" aria-hidden="true" />
+                    <div className="preset-copy">
+                      <div className="preset-copy__top">
+                        <strong>{preset.label}</strong>
+                        <span className="preset-nums">
+                          {preset.indices.length === 1 ? `#${preset.indices[0]}` : `#${preset.indices[0]}–${preset.indices[preset.indices.length - 1]}`}
+                        </span>
+                        {stateLabel.includes('已替换') && <em className="mini-tag">{stateLabel}</em>}
+                      </div>
+                      <small>{preset.note}</small>
+                    </div>
+                    {ready && replacedIndices.length > 0 && (
+                      <button
+                        type="button"
+                        className="ghost-btn is-compact"
+                        disabled={isBusy || firmwareBlocked}
+                        onClick={e => { e.stopPropagation(); setConfirmRestoreTarget(replacedIndices); }}
+                      >
+                        <UndoOutlined />恢复
+                      </button>
+                    )}
+                  </div>;
+                })}
               </div>
             ) : (
               <>
                 <div className="quick-pills">
-                  <button type="button" disabled={isBusy} onClick={() => setSelected(Array.from({ length: 14 }, (_, i) => i))}>前 14 项</button>
-                  <button type="button" disabled={isBusy} onClick={() => setSelected(Array.from({ length: 14 }, (_, i) => i + 14))}>后 14 项</button>
+                  <button type="button" disabled={isBusy} onClick={() => setSelected([1, 2, 3])}>对焦 #1–3</button>
+                  <button type="button" disabled={isBusy} onClick={() => setSelected([20, 21, 22])}>电子快门 #20–22</button>
+                  <button type="button" disabled={isBusy} onClick={() => setSelected([11, 12, 13])}>连拍 #11–13</button>
                   <button type="button" disabled={isBusy} onClick={() => setSelected(Array.from({ length: 28 }, (_, i) => i))}>全选</button>
                   <button type="button" disabled={isBusy} onClick={() => setSelected([])}>清空</button>
                   {ready && Object.keys(originals).length > 0 && (
@@ -522,8 +552,13 @@ export default function MobileApp() {
                           onChange={() => toggleSlotSelection(row.index)}
                         />
                         <span className="slot-num">#{row.index}</span>
-                        <span className="slot-label">{soundName(row.index, labels)}</span>
-                        {st === '已替换' && <em className="mini-tag">已改</em>}
+                        <span className="slot-copy">
+                          <span className="slot-copy__top">
+                            <span className="slot-label">{soundName(row.index, labels)}</span>
+                            {st === '已替换' && <em className="mini-tag">已改</em>}
+                          </span>
+                          {row.note && <small className="slot-note">{row.note}</small>}
+                        </span>
                       </label>
                       <div className="compact-slot__btns">
                         {ready && <button
@@ -554,7 +589,11 @@ export default function MobileApp() {
             )}
 
             {confirmRestoreTarget !== undefined && <div className="confirm-bar">
-              <span>{confirmRestoreTarget === null ? '确认恢复全部音效为原厂默认？' : `确认恢复 #${confirmRestoreTarget} 原厂音效？`}</span>
+              <span>{confirmRestoreTarget === null
+                ? '确认恢复全部音效为原厂默认？'
+                : Array.isArray(confirmRestoreTarget)
+                  ? `确认恢复 ${confirmRestoreTarget.map(i => `#${i}`).join('、')} 原厂音效？`
+                  : `确认恢复 #${confirmRestoreTarget} 原厂音效？`}</span>
               <div>
                 <button type="button" className="primary-btn is-compact" disabled={isBusy} onClick={() => handleRestoreSounds(confirmRestoreTarget)}>确认</button>
                 <button type="button" className="ghost-btn is-compact" disabled={isBusy} onClick={() => setConfirmRestoreTarget(undefined)}>取消</button>
@@ -610,8 +649,8 @@ export default function MobileApp() {
               <CloudUploadOutlined />
               {!audio
                 ? '请先选择音频'
-                : slotTab === 'focus'
-                  ? '写入对焦提示音'
+                : slotTab === 'common'
+                  ? `写入${activePreset.label}`
                   : `写入所选音效（${activeIndices.length} 项）`}
             </button>
           )}

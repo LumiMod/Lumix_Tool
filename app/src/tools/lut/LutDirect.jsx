@@ -1,460 +1,237 @@
-import { Alert, Button, Card, Flex, Popconfirm, Progress, Space, Switch, Tag } from 'antd';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { Modal } from 'antd';
 import {
-  ArrowLeftOutlined, BgColorsOutlined, CheckCircleFilled, CloudUploadOutlined,
-  DownloadOutlined, EyeOutlined, FolderOpenOutlined, PlaySquareOutlined, RightOutlined,
-  ThunderboltOutlined, UndoOutlined, UsbOutlined, WarningOutlined,
+  ArrowLeftOutlined, ArrowRightOutlined, BookOutlined, CheckOutlined, DownOutlined,
+  LoadingOutlined, PoweroffOutlined, SettingOutlined, UsbOutlined, WarningOutlined,
 } from '@ant-design/icons';
-import { useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
+import cameraPhoto from '../../assets/camera/dc-s5-front.webp';
+import menuPhoto from './guide-photos/menu.jpg';
 import LutGuide from './LutGuide';
-import { buildPresetBeef, buildPresetVlt, convertCubeToVlt, convertTextToBeef } from './vltConverter.mjs';
+import LutTransfer from './LutTransfer';
 import './LutDirect.css';
 
-function bytesToBase64(bytes) {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin);
-}
-
-function downloadBlobFallback(filename, content) {
-  const blob = new Blob([content], { type: 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+const overview = { page: 'home' };
 
 export default function LutDirect({
-  mobile = false,
-  device = null,
-  deviceState = null,
-  busy = false,
-  progress = null,
-  onOpenConnect = null,
-  onSetLut = null,
-  onUploadLutSlot = null,
-  onSaveVlt = null,
+  mobile = false, active = true, device, navigate, deviceState, busy, progress,
+  onOpenConnect, onSetLut, onUploadLutSlot, onSaveVlt, backHandlerRef, onBusyChange, onViewChange,
 }) {
   const { t } = useI18n();
-  const [subView, setSubView] = useState(null); // null | 'guide' | 'vlt'
-  const [mode, setMode] = useState('fast');
-  const [playbackFix, setPlaybackFix] = useState(true);
-  const [targetSlot, setTargetSlot] = useState(0); // 0=Vlog_709, 1..4=SET1..4
-  const [confirmRestore, setConfirmRestore] = useState(false);
-  const [error, setError] = useState('');
-  const [vltMsg, setVltMsg] = useState(null);
-  const fileInputRef = useRef(null);
-  const ramInputRef = useRef(null);
-
-  // Normalize Desktop vs Mobile state
-  const api = mobile ? null : device?.api;
-  const cameraInfo = mobile ? (deviceState || {}) : (device?.device || {});
-  const lut = cameraInfo?.lut || null;
-  const connected = !!cameraInfo?.connected && !cameraInfo?.error;
+  const camera = (mobile ? deviceState : device?.device) || {};
+  const connected = !!camera.connected && !camera.error;
+  const lut = camera.lut;
   const supported = !!lut?.supported;
   const enabled = !!lut?.enabled;
-  const working = mobile
-    ? (busy && (progress?.phase === 'lut-enable' || progress?.phase === 'lut-restore'))
-    : (device?.busy?.tool === 'lut-direct');
-  const disabled = mobile ? !!busy : (!!device?.locked || working);
-  const curProgress = mobile ? progress : device?.progress;
-  const pct = working && curProgress?.total > 0
-    ? Math.min(100, Math.round(((curProgress.done || 0) / curProgress.total) * 100))
-    : 0;
+  const locked = mobile ? busy : device?.locked;
+  const [view, setView] = useState(() => (mobile && globalThis.history?.state?.lutView) || overview);
+  const [action, setAction] = useState('');
+  const [dialog, setDialog] = useState({ kind: 'success', open: false });
+  const [issue, setIssue] = useState('');
+  const [restored, setRestored] = useState(false);
+  const [transferPending, setTransferPending] = useState(false);
+  const [draft, setDraft] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const actionLock = useRef(false);
+  const header = useRef(null);
+  const opener = useRef(null);
+  const moved = useRef(false);
+  const isBlocked = !!action || transferPending;
+  useEffect(() => { onBusyChange?.(isBlocked); }, [isBlocked, onBusyChange]);
+  const mode = draft?.mode ?? (lut?.mode === 'lossless' ? 'lossless' : 'fast');
+  const playbackFix = draft?.playbackFix ?? (enabled ? !!lut?.playbackFix : true);
+  const feed = mobile ? progress : device?.progress;
+  const targetPhase = action === 'restore' ? 'lut-restore' : 'lut-enable';
+  const amount = action && feed?.phase === targetPhase && feed.total > 0
+    ? Math.max(0, Math.min(100, Math.round(100 * feed.done / feed.total))) : null;
 
-  async function run(enable) {
-    if (disabled) return;
-    setConfirmRestore(false);
-    setError('');
-    try {
-      let res;
-      if (mobile) {
-        if (!onSetLut) return;
-        res = await onSetLut({ enable, mode, playbackFix });
-      } else {
-        if (!api) return;
-        res = await device.runOperation({
-          tool: 'lut-direct',
-          label: enable ? t('lut.enabling') : t('lut.restoring'),
-          execute: () => api.setLut({ enable, mode, playbackFix }),
-        });
+  useEffect(() => {
+    if (connected) return;
+    setDraft(null);
+    setRestored(false);
+    setSettingsOpen(false);
+  }, [connected]);
+
+  useEffect(() => {
+    if (!mobile) return;
+    const pop = () => {
+      if (history.state?.tool === 'lut') {
+        moved.current = true;
+        setView(history.state.lutView || overview);
       }
-      if (!res?.ok) setError(res?.error || t('lut.opFailed'));
-    } catch (err) {
-      setError(err.message || String(err));
+    };
+    window.addEventListener('popstate', pop);
+    return () => window.removeEventListener('popstate', pop);
+  }, [mobile]);
+
+  useEffect(() => {
+    onViewChange?.(view.page);
+    if (!moved.current) return;
+    moved.current = false;
+    if (view.page === 'home') {
+      document.getElementById(opener.current)?.focus();
+    } else {
+      const title = mobile ? document.getElementById('mobile-page-heading') : header.current;
+      title?.focus({ preventScroll: true });
+      title?.scrollIntoView({ block: 'nearest' });
     }
+  }, [view, mobile, onViewChange]);
+
+  function openView(next, trigger) {
+    if (isBlocked) return;
+    if (view.page === 'home') opener.current = (trigger || document.activeElement)?.id;
+    moved.current = true;
+    if (mobile) history.pushState({ tool: 'lut', lutView: next }, '', '#lut/' + next.page);
+    setView(next);
   }
 
-  async function saveVltFile(filename, content) {
-    setVltMsg(null);
+  function back() {
+    if (dialog.open) { closeDialog(); return true; }
+    if (isBlocked) return true;
+    if (view.page === 'home') return false;
+    if (mobile && history.state?.lutView) history.back();
+    else {
+      moved.current = true;
+      setView(view.fromTransfer ? { page: 'transfer' } : overview);
+    }
+    return true;
+  }
+  useImperativeHandle(backHandlerRef, () => back);
+
+  function closeDialog() {
+    setDialog(current => ({ ...current, open: false }));
+  }
+
+  function refocusAfterDialog() {
+    if (!active || view.page !== 'home') return;
+    const restore = dialog.kind === 'restore' && document.getElementById('btnRestoreLut');
+    (restore || document.getElementById('btnEnableLut'))?.focus();
+  }
+
+  function openGuide(route = 'card', trigger) {
+    closeDialog();
+    openView({ page: 'guide', route, fromTransfer: view.page === 'transfer' }, trigger);
+  }
+
+  function connect() {
+    if (mobile) onOpenConnect();
+    else navigate('connection');
+  }
+
+  async function apply(enable) {
+    if (locked || actionLock.current || !connected || !supported) return;
+    actionLock.current = true;
+    closeDialog();
+    setIssue('');
+    setRestored(false);
+    setSettingsOpen(false);
+    setAction(enable ? 'activate' : 'restore');
     try {
-      const saver = mobile ? onSaveVlt : api?.saveVlt;
-      if (saver) {
-        const res = await saver(filename, content);
-        if (res?.canceled) return;
-        if (!res?.ok) {
-          setVltMsg({ type: 'error', text: res?.error || t('lut.vltSaveFail') });
-          return;
-        }
-        setVltMsg({ type: 'success', text: t('lut.vltSaved', { name: filename }) });
-      } else {
-        downloadBlobFallback(filename, content);
-        setVltMsg({ type: 'success', text: t('lut.vltSaved', { name: filename }) });
-      }
-    } catch (err) {
-      setVltMsg({ type: 'error', text: err.message || String(err) });
+      const options = { enable, mode, playbackFix };
+      const result = mobile ? await onSetLut(options) : await device.runOperation({
+        tool: 'lut-direct', label: t(enable ? 'lut.enabling' : 'lut.restoring'),
+        execute: () => device.api.setLut(options),
+      });
+      if (!result?.ok) throw new Error(result?.error || t('lut.opFailed'));
+      setDraft(null);
+      if (enable) setDialog({ kind: 'success', open: true });
+      else setRestored(true);
+    } catch (error) {
+      setIssue(error.message || String(error));
+    } finally {
+      actionLock.current = false;
+      setAction('');
     }
   }
 
-  async function onPickCube(e) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setVltMsg(null);
-    try {
-      const text = await file.text();
-      const converted = convertCubeToVlt(text, file.name);
-      await saveVltFile(converted.filename, converted.content);
-    } catch (err) {
-      setVltMsg({ type: 'error', text: err.message || String(err) });
-    }
+  function upload(options) {
+    return mobile ? onUploadLutSlot(options) : device.runOperation({
+      tool: 'lut-direct', label: t('lut.uploadingSlot'),
+      execute: () => device.api.uploadLutSlot(options),
+    });
   }
 
-  async function uploadBeefToSlot(beefBytes, label) {
-    if (disabled) return;
-    setVltMsg(null);
-    if (!connected || !supported) {
-      setVltMsg({ type: 'error', text: t('lut.notConnectedTitle') });
-      return;
-    }
-    try {
-      const beefBase64 = bytesToBase64(beefBytes);
-      let res;
-      if (mobile) {
-        if (!onUploadLutSlot) return;
-        res = await onUploadLutSlot({ slot: targetSlot, beefBase64 });
-      } else {
-        if (!api?.uploadLutSlot) return;
-        res = await device.runOperation({
-          tool: 'lut-direct',
-          label: t('lut.uploadingSlot'),
-          execute: () => api.uploadLutSlot({ slot: targetSlot, beefBase64 }),
-        });
-      }
-      if (!res?.ok) {
-        setVltMsg({ type: 'error', text: res?.error || t('lut.opFailed') });
-      } else {
-        const slotName = targetSlot === 0 ? 'Vlog_709' : `SET${targetSlot}`;
-        setVltMsg({ type: 'success', text: t('lut.ramInjected', { name: label, slot: slotName }) });
-      }
-    } catch (err) {
-      setVltMsg({ type: 'error', text: err.message || String(err) });
-    }
-  }
+  const state = !connected ? 'disconnected' : !supported ? 'unsupported' : enabled ? 'active' : 'ready';
+  const status = action ? t(action === 'activate' ? 'lut.enabling' : 'lut.restoring') : t('lut.state.' + state);
+  const canActivate = connected && supported;
+  const transferOpen = view.page === 'transfer' || view.fromTransfer;
+  const subTitle = t(view.page === 'guide' ? 'lut.guideTitle' : 'lut.transferTitle');
 
-  async function onPickRamLut(e) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setVltMsg(null);
-    try {
-      const text = await file.text();
-      const { bytes } = convertTextToBeef(text, file.name);
-      await uploadBeefToSlot(bytes, file.name);
-    } catch (err) {
-      setVltMsg({ type: 'error', text: err.message || String(err) });
-    }
-  }
-
-  // Level-3 Sub-view: Authentic DC-S5 Animated Menu Simulator
-  if (subView === 'guide') {
-    const body = (
-      <div>
-        <div className="lut-subhead">
-          <button type="button" className="lut-subhead__back" aria-label={t('nav.back')} onClick={() => setSubView(null)}>
-            <ArrowLeftOutlined />
-          </button>
-          <span className="lut-subhead__title">{t('lut.subGuideTitle')}</span>
-        </div>
-        <LutGuide />
-      </div>
-    );
-    return mobile ? <div className="gate-card">{body}</div> : <Card>{body}</Card>;
-  }
-
-  // Level-3 Sub-view: .cube -> .VLT Converter & Built-in Presets
-  if (subView === 'vlt') {
-    const body = (
-      <div>
-        <div className="lut-subhead">
-          <button type="button" className="lut-subhead__back" aria-label={t('nav.back')} onClick={() => setSubView(null)}>
-            <ArrowLeftOutlined />
-          </button>
-          <span className="lut-subhead__title">{t('lut.subVltTitle')}</span>
-        </div>
-
-        <input ref={fileInputRef} type="file" accept=".cube,.CUBE" style={{ display: 'none' }} onChange={onPickCube} />
-        <input ref={ramInputRef} type="file" accept=".cube,.CUBE,.vlt,.VLT" style={{ display: 'none' }} onChange={onPickRamLut} />
-
-        {/* Option 4: Direct Service USB RAM LUT Slot Injection */}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <strong style={{ fontSize: 13 }}><CloudUploadOutlined /> {t('lut.ramInjectTitle')}</strong>
-            <span style={{ fontSize: 11, opacity: 0.65 }}>{t('lut.ramInjectNote')}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            {[0, 1, 2, 3, 4].map(s => (
-              <button
-                key={s}
-                type="button"
-                className={'s5-guide__step' + (targetSlot === s ? ' is-active' : '')}
-                style={{ padding: '4px 10px' }}
-                disabled={disabled}
-                onClick={() => setTargetSlot(s)}
-              >
-                {s === 0 ? 'Vlog_709' : `SET${s}`}
-              </button>
-            ))}
-          </div>
-          {mobile ? (
-            <button type="button" className="btn btn-primary" style={{ width: '100%' }} disabled={disabled || !connected || !supported} onClick={() => ramInputRef.current?.click()}>
-              <CloudUploadOutlined /> {t('lut.ramInjectBtn')}
-            </button>
-          ) : (
-            <Button type="primary" block size="large" icon={<CloudUploadOutlined />} loading={working} disabled={disabled || !connected || !supported} onClick={() => ramInputRef.current?.click()}>
-              {t('lut.ramInjectBtn')}
-            </Button>
-          )}
-          <div className="lut-presets">
-            <button type="button" className="lut-preset" disabled={disabled || !connected || !supported} onClick={() => { const p = buildPresetBeef('cinewarm'); uploadBeefToSlot(p.bytes, 'CineWarm'); }}>
-              <div className="lut-preset__swatch is-cine" />
-              <div className="lut-preset__body">
-                <span>CineWarm → RAM</span>
-                <CloudUploadOutlined />
-              </div>
-            </button>
-            <button type="button" className="lut-preset" disabled={disabled || !connected || !supported} onClick={() => { const p = buildPresetBeef('bw'); uploadBeefToSlot(p.bytes, 'B&W HC'); }}>
-              <div className="lut-preset__swatch is-bw" />
-              <div className="lut-preset__body">
-                <span>B&amp;W → RAM</span>
-                <CloudUploadOutlined />
-              </div>
-            </button>
-          </div>
-        </div>
-
-        {/* SD Card .VLT export fallback */}
-        <div style={{ borderTop: '1px solid rgba(128,128,128,0.2)', paddingTop: 12 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {mobile ? (
-              <>
-                <button type="button" className="btn" style={{ flex: 1 }} onClick={() => fileInputRef.current?.click()}>
-                  <FolderOpenOutlined /> {t('lut.convertCubeBtn')}
+  return <section className="lut-studio" aria-label={t('nav.lut')}>
+    {view.page === 'home' ? <>
+      <section className="lut-activation" aria-labelledby="lut-activation-title">
+        <div className="lut-activation__hero">
+          <div className="lut-camera-art" aria-hidden="true"><img src={cameraPhoto} alt="" /></div>
+          <div className="lut-activation__copy">
+            <div className={'lut-state is-' + state} role="status"><i aria-hidden="true" />{status}</div>
+            <h2 id="lut-activation-title">{t('lut.activateTitle')}</h2>
+            <p>{t('lut.hint.' + state)}</p>
+            <div className="lut-actions">
+              {!connected && <button id="lutConnectBtn" type="button" className="lut-btn is-light" onClick={connect}><UsbOutlined />{t('nav.connection')}</button>}
+              {canActivate && <>
+                <button id="btnEnableLut" type="button" className="lut-btn is-light" disabled={locked || !!action} onClick={() => apply(true)}>
+                  {action === 'activate' ? <LoadingOutlined spin /> : <PoweroffOutlined />}{t(action === 'activate' ? 'lut.enabling' : enabled ? 'lut.updateBtn' : 'lut.enableBtn')}
                 </button>
-                <button type="button" className="btn" onClick={() => { const p = buildPresetVlt('cinewarm'); saveVltFile(p.filename, p.content); }}>
-                  <DownloadOutlined /> .VLT
+                <button type="button" className="lut-settings-toggle" disabled={!!action} aria-expanded={settingsOpen} aria-controls="lut-settings" onClick={() => setSettingsOpen(!settingsOpen)}>
+                  <SettingOutlined />{t('lut.settings')}<DownOutlined className={settingsOpen ? 'is-open' : ''} />
                 </button>
-              </>
-            ) : (
-              <>
-                <Button icon={<FolderOpenOutlined />} onClick={() => fileInputRef.current?.click()}>
-                  {t('lut.convertCubeBtn')}
-                </Button>
-                <Button icon={<DownloadOutlined />} onClick={() => { const p = buildPresetVlt('cinewarm'); saveVltFile(p.filename, p.content); }}>
-                  CINEWARM.VLT
-                </Button>
-                <Button icon={<DownloadOutlined />} onClick={() => { const p = buildPresetVlt('bw'); saveVltFile(p.filename, p.content); }}>
-                  BWHC.VLT
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-
-        <p className="lut-foot-note" style={{ marginTop: 12 }}>{t('lut.vltRuleHint')}</p>
-        {vltMsg && (
-          mobile
-            ? <div className={'m-alert ' + (vltMsg.type === 'success' ? 'is-ok' : 'is-warn')} style={{ marginTop: 10 }}>{vltMsg.text}</div>
-            : <Alert type={vltMsg.type} showIcon title={vltMsg.text} style={{ marginTop: 12 }} />
-        )}
-      </div>
-    );
-    return mobile ? <div className="gate-card">{body}</div> : <Card>{body}</Card>;
-  }
-
-  // Level-2 Main View: Visual, clean, zero text walls!
-  const hero = (
-    <div className="lut-hero" aria-hidden="true">
-      <div className="lut-hero__wipe" />
-      <div className="lut-hero__divider" />
-      <span className={'lut-hero__status' + (enabled ? ' is-on' : '')}>
-        {enabled ? <><CheckCircleFilled /> {t('lut.enabledTag')}</> : connected ? t('lut.stockTag') : t('status.disconnected')}
-      </span>
-      <span className="lut-hero__label">V-Log</span>
-      <span className="lut-hero__label is-lut">Real-Time LUT</span>
-    </div>
-  );
-
-  const controls = (
-    <Flex vertical gap={12}>
-      {hero}
-
-      {!connected && (
-        mobile ? (
-          <button type="button" className="btn btn-primary" onClick={onOpenConnect}>
-            <UsbOutlined /> {t('lut.goConnect')}
-          </button>
-        ) : (
-          <Button id="lutConnectBtn" type="primary" size="large" icon={<UsbOutlined />} onClick={() => device?.navigate?.('connection')}>
-            {t('lut.goConnect')}
-          </Button>
-        )
-      )}
-
-      {connected && !supported && (
-        mobile
-          ? <div className="m-alert is-warn"><WarningOutlined /> {lut?.error || t('lut.unsupportedTitle')}</div>
-          : <Alert type="error" showIcon title={t('lut.unsupportedTitle')} description={lut?.error || t('lut.unsupportedDesc')} />
-      )}
-
-      {connected && supported && (
-        <>
-          <div className="lut-modes" role="radiogroup" aria-label={t('lut.modeLabel')}>
-            <button
-              type="button"
-              className={'lut-mode-btn' + (mode === 'fast' ? ' is-selected' : '')}
-              disabled={disabled}
-              onClick={() => setMode('fast')}
-            >
-              <span className="lut-mode-btn__ico"><ThunderboltOutlined /></span>
-              <span className="lut-mode-btn__copy">
-                <strong>{t('lut.modeFastShort')}</strong>
-                <span>~2s · {t('lut.recommended')}</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={'lut-mode-btn' + (mode === 'lossless' ? ' is-selected' : '')}
-              disabled={disabled}
-              onClick={() => setMode('lossless')}
-            >
-              <span className="lut-mode-btn__ico"><BgColorsOutlined /></span>
-              <span className="lut-mode-btn__copy">
-                <strong>{t('lut.modeLosslessShort')}</strong>
-                <span>~3.5s · {t('lut.bitExact')}</span>
-              </span>
-            </button>
-          </div>
-
-          <div className="lut-toggle-row">
-            <span className="lut-toggle-row__left">
-              <EyeOutlined />
-              <span>{t('lut.playbackFixShort')}</span>
-            </span>
-            {mobile ? (
-              <input type="checkbox" checked={playbackFix} disabled={disabled} onChange={e => setPlaybackFix(e.target.checked)} />
-            ) : (
-              <Switch size="small" checked={playbackFix} disabled={disabled} onChange={setPlaybackFix} />
-            )}
-          </div>
-
-          {working && (
-            mobile
-              ? <div className="m-progress"><div className="m-progress__bar" style={{ width: `${pct}%` }} /></div>
-              : <Progress percent={pct} status="active" showInfo={false} />
-          )}
-
-          {mobile ? (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" className="btn btn-primary" style={{ flex: 1 }} disabled={disabled} onClick={() => run(true)}>
-                <BgColorsOutlined /> {enabled ? t('lut.updateBtn') : t('lut.enableBtn')}
-              </button>
-              {enabled && !confirmRestore && (
-                <button type="button" className="btn" disabled={disabled} onClick={() => setConfirmRestore(true)}>
-                  <UndoOutlined /> {t('lut.restoreBtn')}
-                </button>
-              )}
-              {enabled && confirmRestore && (
-                <button type="button" className="btn btn-danger" disabled={disabled} onClick={() => run(false)}>
-                  {t('lut.restoreConfirmOk')}
-                </button>
-              )}
+              </>}
+              {connected && !supported && lut?.error && <span className="lut-firmware-note">{lut.error}</span>}
             </div>
-          ) : (
-            <Space wrap>
-              <Button id="btnEnableLut" type="primary" size="large" icon={<BgColorsOutlined />} loading={working} disabled={disabled} onClick={() => run(true)}>
-                {enabled ? t('lut.updateBtn') : t('lut.enableBtn')}
-              </Button>
-              {enabled && (
-                <Popconfirm
-                  title={t('lut.restoreConfirmTitle')}
-                  okText={t('lut.restoreConfirmOk')}
-                  cancelText={t('lut.cancel')}
-                  disabled={disabled}
-                  onConfirm={() => run(false)}
-                >
-                  <Button id="btnRestoreLut" size="large" icon={<UndoOutlined />} loading={working} disabled={disabled}>
-                    {t('lut.restoreBtn')}
-                  </Button>
-                </Popconfirm>
-              )}
-            </Space>
-          )}
-        </>
-      )}
-
-      {error && (
-        mobile
-          ? <div className="m-alert is-warn">{error}</div>
-          : <Alert type="error" showIcon title={error} />
-      )}
-    </Flex>
-  );
-
-  const subEntries = (
-    <div className="lut-subgrid">
-      <button type="button" className="lut-subtile" onClick={() => setSubView('guide')}>
-        <span className="lut-subtile__left">
-          <span className="lut-subtile__ico"><PlaySquareOutlined /></span>
-          <span className="lut-subtile__text">
-            <strong>{t('lut.subGuideTitle')}</strong>
-            <span>{t('lut.subGuideSub')}</span>
-          </span>
-        </span>
-        <RightOutlined style={{ opacity: 0.45 }} />
-      </button>
-      <button type="button" className="lut-subtile" onClick={() => setSubView('vlt')}>
-        <span className="lut-subtile__left">
-          <span className="lut-subtile__ico is-blue"><FolderOpenOutlined /></span>
-          <span className="lut-subtile__text">
-            <strong>{t('lut.subVltTitle')}</strong>
-            <span>{t('lut.subVltSub')}</span>
-          </span>
-        </span>
-        <RightOutlined style={{ opacity: 0.45 }} />
-      </button>
-    </div>
-  );
-
-  if (mobile) {
-    return (
-      <section className="m-lut" aria-label={t('nav.lut')}>
-        <div className="gate-card">{controls}</div>
-        {subEntries}
-        <p className="lut-foot-note">{t('lut.ramOnlyMeta')}</p>
+          </div>
+        </div>
+        {settingsOpen && canActivate && <div className="lut-settings" id="lut-settings">
+          <fieldset disabled={!!action}><legend>{t('lut.modeLabel')}</legend><div className="lut-mode-options">
+            {['fast', 'lossless'].map(value => <label key={value}>
+              <input type="radio" name="lut-mode" checked={mode === value} onChange={() => setDraft({ mode: value, playbackFix })} />{t('lut.mode.' + value)}
+            </label>)}
+          </div></fieldset>
+          <label className="lut-check"><input type="checkbox" checked={playbackFix} disabled={!!action} onChange={e => setDraft({ mode, playbackFix: e.target.checked })} />{t('lut.playback')}</label>
+          {enabled && <button type="button" id="btnRestoreLut" className="lut-btn" disabled={locked || !!action} onClick={() => setDialog({ kind: 'restore', open: true })}>{t('lut.restoreBtn')}</button>}
+        </div>}
+        {action && <div className="lut-live" role="status">
+          <div><LoadingOutlined spin /><strong>{status}</strong>{amount !== null && <b>{amount}%</b>}</div>
+          <progress max="100" value={amount ?? undefined} aria-label={status} />
+          <span>{t('lut.keepUsb')}</span>
+        </div>}
+        {issue && <p className="lut-result is-error" role="alert"><WarningOutlined />{issue}</p>}
+        {restored && <p className="lut-result" role="status"><CheckOutlined />{t('lut.restored')}</p>}
       </section>
-    );
-  }
+      <div className="lut-entry-grid">
+        <button type="button" id="lut-transfer-entry" className="lut-entry" disabled={isBlocked} onClick={e => openView({ page: 'transfer' }, e.currentTarget)}>
+          <div className="lut-entry-art is-transfer" aria-hidden="true">
+            <div className="lut-palette"><i /><i /><i /><i /><i /><i /><i /><i /></div>
+          </div>
+          <div className="lut-entry-body"><div className="lut-entry-title"><h3>{t('lut.transferTitle')}</h3><span className="lut-beta">Beta</span></div>
+            <p>{t('lut.transferIntro')}</p><span className="lut-entry-link">{t('lut.pickLut')}<ArrowRightOutlined /></span></div>
+        </button>
+        <button type="button" id="lut-guide-entry" className="lut-entry" disabled={isBlocked} onClick={e => openGuide('card', e.currentTarget)}>
+          <div className="lut-entry-art is-guide" aria-hidden="true"><img src={menuPhoto} alt="" /></div>
+          <div className="lut-entry-body"><div className="lut-entry-title"><h3>{t('lut.guideTitle')}</h3></div>
+            <p>{t('lut.guideIntro')}</p><span className="lut-entry-link">{t('lut.openGuide')}<ArrowRightOutlined /></span></div>
+        </button>
+      </div>
+    </> : !mobile && <div className="lut-detail-head">
+      <button type="button" className="lut-back" disabled={isBlocked} onClick={back}><ArrowLeftOutlined />{t('nav.back')}</button>
+      <h2 ref={header} tabIndex="-1">{subTitle}</h2>
+    </div>}
+    {transferOpen && <div hidden={view.page !== 'transfer'}>
+      <LutTransfer connected={connected} supported={supported} locked={!!locked} progress={feed}
+        onUpload={upload} onSave={mobile ? onSaveVlt : device?.api?.saveVlt}
+        onConnect={connect} onGuide={openGuide} onPendingChange={setTransferPending} />
+    </div>}
+    {view.page === 'guide' && <LutGuide initialRoute={view.route} />}
 
-  return (
-    <Flex vertical gap={14} className="lut-page">
-      <Card>{controls}</Card>
-      {subEntries}
-      <p className="lut-foot-note">{t('lut.ramOnlyMeta')}</p>
-    </Flex>
-  );
+    <Modal open={active && dialog.open} centered width={420} footer={null} onCancel={closeDialog} afterClose={refocusAfterDialog}
+      title={<>
+        <span aria-hidden="true" className={'lut-dialog-icon' + (dialog.kind === 'restore' ? ' is-restore' : '')}>{dialog.kind === 'restore' ? <PoweroffOutlined /> : <CheckOutlined />}</span>
+        <span className="lut-dialog-title">{t(dialog.kind === 'restore' ? 'lut.restoreConfirmTitle' : 'lut.success')}</span>
+      </>} closable={false} className="lut-dialog" destroyOnHidden>
+      <p>{t(dialog.kind === 'restore' ? 'lut.restoreConfirmDesc' : 'lut.successHint')}</p>
+      <div className="lut-dialog-actions">{dialog.kind === 'restore' ?
+        <><button type="button" className="lut-btn" onClick={closeDialog}>{t('lut.cancel')}</button><button type="button" className="lut-btn is-primary" onClick={() => apply(false)}>{t('lut.restoreConfirmOk')}</button></> :
+        <><button type="button" className="lut-btn" onClick={() => openGuide('camera', document.getElementById('btnEnableLut'))}><BookOutlined />{t('lut.guideTitle')}</button><button type="button" className="lut-btn is-primary" onClick={closeDialog}>{t('lut.done')}</button></>}
+      </div>
+    </Modal>
+  </section>;
 }

@@ -2,11 +2,11 @@ import { useAudioPreview } from './hooks/useAudioPreview';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConfigProvider, theme } from 'antd';
 import {
-  ArrowLeftOutlined, BgColorsOutlined, CheckCircleFilled, CloudSyncOutlined, CloudUploadOutlined,
-  DownloadOutlined, EditOutlined, ExpandOutlined, FolderOpenOutlined,
-  GithubOutlined, GlobalOutlined, PauseOutlined, PlayCircleOutlined,
-  ReloadOutlined, RightOutlined, ScanOutlined, SettingOutlined,
-  SoundOutlined, StarOutlined, UndoOutlined, UsbOutlined, WarningOutlined,
+  ArrowLeftOutlined, CheckCircleFilled, CloudUploadOutlined,
+  DownloadOutlined, EditOutlined, FolderOpenOutlined,
+  PauseOutlined, PlayCircleOutlined,
+  ReloadOutlined, ScanOutlined, SettingOutlined,
+  UndoOutlined, UsbOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import OpenGate from './tools/OpenGate';
 import LutDirect from './tools/lut/LutDirect';
@@ -17,8 +17,11 @@ import { slotState } from './tools/sounds/state.mjs';
 import { BLOCK, liveRegions, memoryStats, planAllocation } from '../memory.mjs';
 import { applySoundBatch, GITHUB_REPO_URL, invokeNative, openExternal, restoreSoundBatch } from './mobileApi';
 import MobileButtonGuide from './MobileButtonGuide';
+import MobileHomeCards from './MobileHomeCards';
 import LanguagePicker from './components/LanguagePicker';
-import { I18nProvider, LANGUAGES, useI18n } from './i18n';
+import Settings from './components/Settings';
+import SupportCard from './components/SupportCard';
+import { I18nProvider, useI18n } from './i18n';
 import './mobile.css';
 
 export default function MobileApp({ initialLang = null } = {}) {
@@ -29,32 +32,40 @@ export default function MobileApp({ initialLang = null } = {}) {
 }
 
 function MobileAppShell() {
-  const { lang, setLang, t } = useI18n();
-  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.3.2';
+  const { lang, t } = useI18n();
   const writeLabel = t('status.busy');
   const keepAwakeHint = t('mobile.audio.keepAwake');
   const restartHint = t('mobile.audio.restartHint');
+  const [lutView, setLutView] = useState(() => globalThis.history?.state?.lutView?.page || 'home');
   const pages = {
     camera: t('nav.connection'),
-    lut: t('mobile.home.lutTitle'),
+    lut: t(lutView === 'guide' ? 'lut.guideTitle' : lutView === 'transfer' ? 'lut.transferTitle' : 'mobile.home.lutTitle'),
     formats: t('mobile.home.formatsTitle'),
     audio: t('mobile.home.audioTitle'),
     settings: t('settings.title'),
   };
 
   const [page, setPage] = useState(() => (typeof history !== 'undefined' ? history.state?.tool : null) || null);
+  const [lutSession, setLutSession] = useState(page === 'lut' ? 1 : 0);
+  const [lutPending, setLutPending] = useState(false);
+  const lutBack = useRef(null);
+  const returnFocus = useRef(null);
   useEffect(() => {
-    const restorePage = () => setPage(history.state?.tool || null);
+    const restorePage = () => {
+      returnFocus.current = history.state?.returnFocus || null;
+      setPage(history.state?.tool || null);
+    };
     window.addEventListener('popstate', restorePage);
     return () => window.removeEventListener('popstate', restorePage);
   }, []);
 
-  const previousTool = useRef(null);
   const heading = useRef(null);
   const pageRef = useRef(page);
   pageRef.current = page;
 
-  const goHome = useCallback(() => {
+  const goBack = useCallback(() => {
+    if (pageRef.current === 'lut' && lutBack.current?.()) return;
+    if (history.state?.appEntry) { history.back(); return; }
     setPage(null);
     try { history.replaceState(null, '', window.location.pathname); } catch {}
   }, []);
@@ -62,17 +73,22 @@ function MobileAppShell() {
   useEffect(() => {
     window.__lumixBack = () => {
       if (pageRef.current) {
-        goHome();
+        goBack();
         return true;
       }
       return false;
     };
     return () => { delete window.__lumixBack; };
-  }, [goHome]);
+  }, [goBack]);
 
   function openTool(tool) {
-    previousTool.current = tool;
-    try { history.pushState({ tool }, '', '#' + tool); } catch {}
+    if (page === tool) return;
+    returnFocus.current = null;
+    if (tool === 'lut') setLutSession(current => current + 1);
+    try {
+      history.replaceState({ ...history.state, returnFocus: document.activeElement?.id || (!page && 'tool-' + tool) }, '');
+      history.pushState({ tool, appEntry: true }, '', '#' + tool);
+    } catch {}
     setPage(tool);
   }
 
@@ -154,12 +170,18 @@ function MobileAppShell() {
 
   useEffect(() => {
     if (page !== 'audio') stopPreview();
-    if (page) heading.current?.focus({ preventScroll: true });
-    else if (previousTool.current) document.getElementById('tool-' + previousTool.current)?.focus({ preventScroll: true });
+    const target = returnFocus.current && document.getElementById(returnFocus.current);
+    returnFocus.current = null;
     window.scrollTo(0, 0);
+    // Restore the originating control after the destination has restored its own view.
+    if (target) {
+      const frame = requestAnimationFrame(() => target.focus({ preventScroll: true }));
+      return () => cancelAnimationFrame(frame);
+    }
+    heading.current?.focus({ preventScroll: true });
   }, [page, stopPreview]);
 
-  const isBusy = !!busyLabel || checking;
+  const isBusy = !!busyLabel || checking || (page === 'lut' && lutPending);
   const ready = !!device?.connected && !!device?.soundTable?.ok;
   const firmwareBlocked = !!device?.connected && device?.verified === false;
   const soundTable = device?.soundTable;
@@ -304,7 +326,7 @@ function MobileAppShell() {
   }}>
     <main className="mobile-shell">
       <header className="mobile-bar">
-        {page && <button className="back-key" aria-label={t('nav.back')} onClick={goHome}><ArrowLeftOutlined /></button>}
+        {page && <button className="back-key" aria-label={t('nav.back')} disabled={page === 'lut' && lutPending} onClick={goBack}><ArrowLeftOutlined /></button>}
         <div className="wordmark"><span className="brand-tile" aria-hidden="true"><i /></span>Lumix<span>Tool</span></div>
         <div className="mobile-bar__right">
           <button
@@ -330,8 +352,8 @@ function MobileAppShell() {
         </div>
       </header>
 
-      <div className="mobile-content" key={page || 'home'}>
-        {page && <h1 className="mobile-title" ref={heading} tabIndex="-1">{pages[page]}</h1>}
+      <div className="mobile-content">
+        {page && <h1 id="mobile-page-heading" className="mobile-title" ref={heading} tabIndex="-1">{pages[page]}</h1>}
 
         {device?.mock && <div className="mock-strip" role="status">
           <span>{t('mobile.mockStrip')}</span>
@@ -340,61 +362,9 @@ function MobileAppShell() {
 
         {/* 首页 */}
         {!page && <nav aria-label={t('nav.tools')} className="home-grid">
-          <button id="tool-camera" className="hero-card" onClick={() => openTool('camera')}>
-            <div className="hero-card__copy">
-              <span className={'hero-tag' + (device?.connected ? ' is-live' : '')}>
-                {device?.connected ? t('mobile.home.cameraReady') : 'LUMIX DC-S5'}
-              </span>
-              <strong>{device?.connected ? t('mobile.home.cameraConnected') : t('mobile.home.cameraConnect')}</strong>
-              <small>
-                {device?.connected
-                  ? `${t('mobile.home.fwLabel')}${device.unlock?.unlocked ? t('mobile.home.unlocked6k') : ''}`
-                  : t('mobile.home.cameraSub')}
-              </small>
-            </div>
-            <div className="hero-card__visual" aria-hidden="true" />
-          </button>
+          <MobileHomeCards device={device} checking={checking} customSounds={live.length} openTool={openTool} />
 
-          <div className="menu-card">
-            <MenuEntry
-              id="lut"
-              icon={<BgColorsOutlined />}
-              title={t('mobile.home.lutTitle')}
-              subtitle={t('mobile.home.lutSub')}
-              badge={device?.lut?.enabled ? t('mobile.home.lutBadge') : null}
-              openTool={openTool}
-            />
-            <MenuEntry
-              id="formats"
-              icon={<ExpandOutlined />}
-              title={t('mobile.home.formatsTitle')}
-              subtitle={t('mobile.home.formatsSub')}
-              badge={device?.unlock?.unlocked ? t('mobile.home.formatsBadge') : null}
-              openTool={openTool}
-            />
-            <MenuEntry
-              id="audio"
-              icon={<SoundOutlined />}
-              title={t('mobile.home.audioTitle')}
-              subtitle={t('mobile.home.audioSub')}
-              badge={live.length ? t('mobile.home.audioBadge', { count: live.length }) : null}
-              openTool={openTool}
-            />
-          </div>
-
-          <div className="menu-card">
-            <button id="btnSupportAuthor" type="button" className="menu-item" onClick={handleSupportAuthor}>
-              <span className="menu-icon is-star" aria-hidden="true"><StarOutlined /></span>
-              <span className="menu-copy">
-                <span className="menu-copy__top">
-                  <strong>{t('support.title')}</strong>
-                  <em className="menu-badge is-star">{t('support.badge')}</em>
-                </span>
-                <small>{t('support.subtitle')}</small>
-              </span>
-              <RightOutlined className="menu-arrow" aria-hidden="true" />
-            </button>
-          </div>
+          <SupportCard id="btnSupportAuthor" onOpen={handleSupportAuthor} />
 
           {linkError && <div role="alert" className="notice-bar is-error">
             <WarningOutlined />
@@ -436,7 +406,12 @@ function MobileAppShell() {
         </section>}
 
         {/* 实时 LUT 直出页 */}
-        {page === 'lut' && <LutDirect
+        {(lutSession > 0 || page === 'lut') && <div hidden={page !== 'lut'}><LutDirect
+          key={lutSession}
+          active={page === 'lut'}
+          backHandlerRef={lutBack}
+          onBusyChange={setLutPending}
+          onViewChange={setLutView}
           mobile
           deviceState={device}
           busy={isBusy}
@@ -452,7 +427,7 @@ function MobileAppShell() {
             false,
           )}
           onSaveVlt={(filename, content) => invokeNative('saveVlt', { filename, content })}
-        />}
+        /></div>}
 
         {/* 片门全开解锁页 */}
         {page === 'formats' && <OpenGate
@@ -468,63 +443,7 @@ function MobileAppShell() {
         />}
 
         {/* 设置页 */}
-        {page === 'settings' && <section className="stack">
-          <div className="white-card">
-            <div className="card-head">
-              <strong><GlobalOutlined style={{ marginRight: 6 }} />{t('settings.langTitle')}</strong>
-            </div>
-            <div className="lang-seg" role="radiogroup" aria-label={t('settings.langTitle')}>
-              {LANGUAGES.map(item => (
-                <button
-                  key={item.code}
-                  type="button"
-                  role="radio"
-                  aria-checked={lang === item.code}
-                  className={lang === item.code ? 'is-active' : ''}
-                  onClick={() => setLang(item.code)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-            <p className="settings-hint">{t('settings.langDesc')}</p>
-          </div>
-
-          <div className="white-card">
-            <div className="card-head">
-              <strong><CloudSyncOutlined style={{ marginRight: 6 }} />{t('settings.otaTitle')}</strong>
-              <span className="muted-pill">{t('settings.otaTag')}</span>
-            </div>
-            <p className="settings-hint" style={{ marginTop: 0 }}>{t('settings.otaDesc', { version: appVersion })}</p>
-            <button id="btnMobileOta" type="button" className="ghost-btn" disabled style={{ marginTop: 10 }}>
-              <CloudSyncOutlined />{t('settings.otaBtn')}
-            </button>
-          </div>
-
-          <div className="white-card">
-            <div className="card-head">
-              <strong><StarOutlined style={{ marginRight: 6, color: '#d97706' }} />{t('support.title')}</strong>
-              <em className="menu-badge is-star">GitHub Star</em>
-            </div>
-            <p className="settings-hint" style={{ marginTop: 0 }}>{t('support.desc')}</p>
-            <button id="btnMobileSettingsStar" type="button" className="primary-btn" style={{ marginTop: 10 }} onClick={handleSupportAuthor}>
-              <GithubOutlined />{t('support.btn')}
-            </button>
-            {linkError && <p className="inline-err">{linkError}</p>}
-          </div>
-
-          <div className="white-card">
-            <div className="card-head">
-              <strong>{t('settings.aboutTitle')}</strong>
-              <span className="muted-pill">v{appVersion}</span>
-            </div>
-            <div className="kv-list">
-              <div><span>{t('settings.versionLabel')}</span><strong>v{appVersion}</strong></div>
-              <div><span>{t('settings.supportCamera')}</span><strong>DC-S5 (v2.9)</strong></div>
-              <div><span>{t('settings.runMode')}</span><strong>{t('settings.runModeAndroid')}</strong></div>
-            </div>
-          </div>
-        </section>}
+        {page === 'settings' && <Settings mobile onOpenRepository={() => openExternal(GITHUB_REPO_URL)} />}
 
         {/* 相机音效替换页 */}
         {page === 'audio' && <section className="stack">
@@ -798,18 +717,4 @@ function MobileAppShell() {
       </div>
     </main>
   </ConfigProvider>;
-}
-
-function MenuEntry({ id, icon, title, subtitle, badge, openTool }) {
-  return <button id={'tool-' + id} className="menu-item" onClick={() => openTool(id)}>
-    <span className="menu-icon" aria-hidden="true">{icon}</span>
-    <span className="menu-copy">
-      <span className="menu-copy__top">
-        <strong>{title}</strong>
-        {badge && <em className="menu-badge">{badge}</em>}
-      </span>
-      <small>{subtitle}</small>
-    </span>
-    <RightOutlined className="menu-arrow" aria-hidden="true" />
-  </button>;
 }

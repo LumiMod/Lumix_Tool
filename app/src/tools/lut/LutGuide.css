@@ -46,8 +46,8 @@
 }
 .s5-guide__sources button[aria-pressed="true"] {
   background: var(--guide-surface);
-  border-color: var(--guide-line);
-  color: var(--guide-ink);
+  border-color: var(--guide-accent);
+  color: var(--guide-accent);
   box-shadow: 0 1px 3px #0000000a;
 }
 .s5-guide__prep,
@@ -95,8 +95,8 @@
   color: var(--guide-muted);
   font-size: 12px;
 }
-.s5-guide__index button:hover,
-.s5-guide__index button[aria-current] { background: var(--guide-inset); }
+.s5-guide__index button:hover { background: var(--guide-inset); }
+.s5-guide__index button[aria-current] { background: var(--lut-accent-soft); }
 .s5-guide__index button[aria-current],
 .s5-guide__index button[aria-current] .s5-guide__number {
   color: var(--guide-accent);
@@ -151,13 +151,19 @@
   font-size: 13px;
   font-weight: 600;
 }
-.s5-guide__paging button:last-child { color: var(--guide-accent); }
-.s5-guide__paging button:hover:enabled { background: var(--guide-inset); }
+.s5-guide__paging button:first-child:hover:enabled { background: var(--guide-inset); }
+.s5-guide__paging button:last-child {
+  border-color: var(--guide-accent);
+  background: var(--guide-accent);
+  color: var(--lut-on-button);
+}
+.s5-guide__paging button:last-child:hover { filter: brightness(.95); }
 .s5-guide__paging button:disabled { opacity: .4; cursor: default; }
 .s5-guide__note {
   margin-top: 20px;
-  padding-inline-start: 14px;
-  border-inline-start: 3px solid var(--guide-line);
+  padding: 12px 14px;
+  border-radius: 7px;
+  background: var(--lut-accent-soft);
 }
 .s5-guide__note strong { font-size: 14px; }
 .s5-guide__note p { margin-top: 4px; }

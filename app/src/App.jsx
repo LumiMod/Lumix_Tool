@@ -1,5 +1,5 @@
 import { Alert, Badge, Button, Checkbox, ConfigProvider, Flex, Layout, Menu, Select, Space, Typography, theme } from 'antd';
-import { AimOutlined, ExperimentOutlined, ReloadOutlined, SettingOutlined, UsbOutlined } from '@ant-design/icons';
+import { AimOutlined, ExperimentOutlined, ReloadOutlined, SettingOutlined, StarOutlined, UsbOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState } from 'react';
 import './styles.css';
 import './components/ConnectionGuide.css';
@@ -8,7 +8,6 @@ import { useDevice } from './hooks/useDevice';
 import { tools } from './tools';
 import ConnectionGuide from './components/ConnectionGuide';
 import Settings from './components/Settings';
-import SupportCard from './components/SupportCard';
 import LanguagePicker from './components/LanguagePicker';
 import { needsDriverSetup } from './components/driverState.mjs';
 import { I18nProvider, useI18n } from './i18n';
@@ -88,7 +87,11 @@ function DesktopApp() {
         <nav aria-label={t('nav.tools')}><Menu mode="inline" className="rail-menu" inlineIndent={14}
           selectedKeys={[page]} items={menuItems} onClick={({ key }) => setPage(key)} /></nav>
         <div className="sidebar-bottom">
-          <SupportCard compact id="btnSupportAuthor" onOpen={openGithub} />
+          <button type="button" id="btnSupportAuthor" className="sidebar-support" title={t('support.subtitle')} onClick={openGithub}>
+            <StarOutlined className="sidebar-support__icon" aria-hidden="true" />
+            <span>{t('support.title')}</span>
+            <span className="sidebar-support__tag">Star</span>
+          </button>
           <div className="sidebar-footer"><span>{t('status.localRun')}</span><span>v{__APP_VERSION__}</span></div>
         </div>
       </div>

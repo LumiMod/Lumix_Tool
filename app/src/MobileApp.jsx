@@ -2,11 +2,11 @@ import { useAudioPreview } from './hooks/useAudioPreview';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConfigProvider, theme } from 'antd';
 import {
-  ArrowLeftOutlined, CheckCircleFilled, CloudUploadOutlined,
-  DownloadOutlined, EditOutlined, FolderOpenOutlined,
-  PauseOutlined, PlayCircleOutlined,
-  ReloadOutlined, ScanOutlined, SettingOutlined,
-  UndoOutlined, UsbOutlined, WarningOutlined,
+  ArrowLeftOutlined, BgColorsOutlined, CheckCircleFilled, CloudSyncOutlined, CloudUploadOutlined,
+  DownloadOutlined, EditOutlined, ExpandOutlined, FolderOpenOutlined,
+  GithubOutlined, GlobalOutlined, PauseOutlined, PlayCircleOutlined,
+  ReloadOutlined, RightOutlined, ScanOutlined, SettingOutlined,
+  SoundOutlined, StarOutlined, UndoOutlined, UsbOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import OpenGate from './tools/OpenGate';
 import LutDirect from './tools/lut/LutDirect';
@@ -17,11 +17,8 @@ import { slotState } from './tools/sounds/state.mjs';
 import { BLOCK, liveRegions, memoryStats, planAllocation } from '../memory.mjs';
 import { applySoundBatch, GITHUB_REPO_URL, invokeNative, openExternal, restoreSoundBatch } from './mobileApi';
 import MobileButtonGuide from './MobileButtonGuide';
-import MobileHomeCards from './MobileHomeCards';
 import LanguagePicker from './components/LanguagePicker';
-import Settings from './components/Settings';
-import SupportCard from './components/SupportCard';
-import { I18nProvider, useI18n } from './i18n';
+import { I18nProvider, LANGUAGES, useI18n } from './i18n';
 import './mobile.css';
 
 export default function MobileApp({ initialLang = null } = {}) {
@@ -32,7 +29,8 @@ export default function MobileApp({ initialLang = null } = {}) {
 }
 
 function MobileAppShell() {
-  const { lang, t } = useI18n();
+  const { lang, setLang, t } = useI18n();
+  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.4.1';
   const writeLabel = t('status.busy');
   const keepAwakeHint = t('mobile.audio.keepAwake');
   const restartHint = t('mobile.audio.restartHint');
@@ -306,6 +304,15 @@ function MobileAppShell() {
   const entryByIndex = new Map(entries.map(e => [e.index, e]));
   const allRows = orderedCatalog.map(item => ({ ...item, ...entryByIndex.get(item.index) }));
 
+  const cameraConnected = !!device?.connected && !device.error;
+  let cameraHint = t('mobile.home.cameraSub');
+  if (checking) cameraHint = t('status.checking');
+  else if (cameraConnected && device.verified) cameraHint = t('mobile.home.fwLabel') + (device.unlock?.unlocked ? t('mobile.home.unlocked6k') : '');
+  else if (cameraConnected && device.body_version) cameraHint = t('mobile.camera.fwBad', { ver: device.body_version });
+  else if (cameraConnected) cameraHint = t('nav.connection');
+  else if (device?.mode === 'ptp') cameraHint = t('status.needService');
+  else if (device?.error) cameraHint = t('status.error');
+
   const pct = progress && progress.total > 0
     ? Math.min(100, Math.max(0, Math.round((progress.done / progress.total) * 100)))
     : 0;
@@ -362,9 +369,57 @@ function MobileAppShell() {
 
         {/* 首页 */}
         {!page && <nav aria-label={t('nav.tools')} className="home-grid">
-          <MobileHomeCards device={device} checking={checking} customSounds={live.length} openTool={openTool} />
+          <button id="tool-camera" className="hero-card" onClick={() => openTool('camera')}>
+            <div className="hero-card__copy">
+              <span className={'hero-tag' + (cameraConnected ? ' is-live' : '')}>
+                {cameraConnected ? t('mobile.home.cameraReady') : 'LUMIX DC-S5'}
+              </span>
+              <strong>{cameraConnected ? t('mobile.home.cameraConnected') : t('mobile.home.cameraConnect')}</strong>
+              <small>{cameraHint}</small>
+            </div>
+            <div className="hero-card__visual" aria-hidden="true" />
+          </button>
 
-          <SupportCard id="btnSupportAuthor" onOpen={handleSupportAuthor} />
+          <div className="menu-card">
+            <MenuEntry
+              id="lut"
+              icon={<BgColorsOutlined />}
+              title={t('mobile.home.lutTitle')}
+              subtitle={t('mobile.home.lutSub')}
+              badge={device?.lut?.enabled ? t('mobile.home.lutBadge') : null}
+              openTool={openTool}
+            />
+            <MenuEntry
+              id="formats"
+              icon={<ExpandOutlined />}
+              title={t('mobile.home.formatsTitle')}
+              subtitle={t('mobile.home.formatsSub')}
+              badge={device?.unlock?.unlocked ? t('mobile.home.formatsBadge') : null}
+              openTool={openTool}
+            />
+            <MenuEntry
+              id="audio"
+              icon={<SoundOutlined />}
+              title={t('mobile.home.audioTitle')}
+              subtitle={t('mobile.home.audioSub')}
+              badge={live.length ? t('mobile.home.audioBadge', { count: live.length }) : null}
+              openTool={openTool}
+            />
+          </div>
+
+          <div className="menu-card">
+            <button id="btnSupportAuthor" type="button" className="menu-item" onClick={handleSupportAuthor}>
+              <span className="menu-icon is-star" aria-hidden="true"><StarOutlined /></span>
+              <span className="menu-copy">
+                <span className="menu-copy__top">
+                  <strong>{t('support.title')}</strong>
+                  <em className="menu-badge is-star">{t('support.badge')}</em>
+                </span>
+                <small>{t('support.subtitle')}</small>
+              </span>
+              <RightOutlined className="menu-arrow" aria-hidden="true" />
+            </button>
+          </div>
 
           {linkError && <div role="alert" className="notice-bar is-error">
             <WarningOutlined />
@@ -443,7 +498,63 @@ function MobileAppShell() {
         />}
 
         {/* 设置页 */}
-        {page === 'settings' && <Settings mobile onOpenRepository={() => openExternal(GITHUB_REPO_URL)} />}
+        {page === 'settings' && <section className="stack">
+          <div className="white-card">
+            <div className="card-head">
+              <strong><GlobalOutlined style={{ marginRight: 6 }} />{t('settings.langTitle')}</strong>
+            </div>
+            <div className="lang-seg" role="radiogroup" aria-label={t('settings.langTitle')}>
+              {LANGUAGES.map(item => (
+                <button
+                  key={item.code}
+                  type="button"
+                  role="radio"
+                  aria-checked={lang === item.code}
+                  className={lang === item.code ? 'is-active' : ''}
+                  onClick={() => setLang(item.code)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <p className="settings-hint">{t('settings.langDesc')}</p>
+          </div>
+
+          <div className="white-card">
+            <div className="card-head">
+              <strong><CloudSyncOutlined style={{ marginRight: 6 }} />{t('settings.otaTitle')}</strong>
+              <span className="muted-pill">{t('settings.otaTag')}</span>
+            </div>
+            <p className="settings-hint" style={{ marginTop: 0 }}>{t('settings.otaDesc', { version: appVersion })}</p>
+            <button id="btnMobileOta" type="button" className="ghost-btn" disabled style={{ marginTop: 10 }}>
+              <CloudSyncOutlined />{t('settings.otaBtn')}
+            </button>
+          </div>
+
+          <div className="white-card">
+            <div className="card-head">
+              <strong><StarOutlined style={{ marginRight: 6, color: '#d97706' }} />{t('support.title')}</strong>
+              <em className="menu-badge is-star">GitHub Star</em>
+            </div>
+            <p className="settings-hint" style={{ marginTop: 0 }}>{t('support.desc')}</p>
+            <button id="btnMobileSettingsStar" type="button" className="primary-btn" style={{ marginTop: 10 }} onClick={handleSupportAuthor}>
+              <GithubOutlined />{t('support.btn')}
+            </button>
+            {linkError && <p className="inline-err">{linkError}</p>}
+          </div>
+
+          <div className="white-card">
+            <div className="card-head">
+              <strong>{t('settings.aboutTitle')}</strong>
+              <span className="muted-pill">v{appVersion}</span>
+            </div>
+            <div className="kv-list">
+              <div><span>{t('settings.versionLabel')}</span><strong>v{appVersion}</strong></div>
+              <div><span>{t('settings.supportCamera')}</span><strong>DC-S5 (v2.9)</strong></div>
+              <div><span>{t('settings.runMode')}</span><strong>{t('settings.runModeAndroid')}</strong></div>
+            </div>
+          </div>
+        </section>}
 
         {/* 相机音效替换页 */}
         {page === 'audio' && <section className="stack">
@@ -717,4 +828,18 @@ function MobileAppShell() {
       </div>
     </main>
   </ConfigProvider>;
+}
+
+function MenuEntry({ id, icon, title, subtitle, badge, openTool }) {
+  return <button id={'tool-' + id} className="menu-item" onClick={() => openTool(id)}>
+    <span className="menu-icon" aria-hidden="true">{icon}</span>
+    <span className="menu-copy">
+      <span className="menu-copy__top">
+        <strong>{title}</strong>
+        {badge && <em className="menu-badge">{badge}</em>}
+      </span>
+      <small>{subtitle}</small>
+    </span>
+    <RightOutlined className="menu-arrow" aria-hidden="true" />
+  </button>;
 }

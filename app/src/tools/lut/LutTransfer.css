@@ -31,8 +31,8 @@
 .lut-transfer__scope b {
   padding: 1px 7px;
   border-radius: 4px;
-  background: #f6deb3;
-  color: #66471a;
+  background: var(--lut-warning-soft);
+  color: var(--lut-warning);
   font-size: 11px;
   font-weight: 700;
 }
@@ -52,9 +52,9 @@
   align-items: center;
   gap: 12px;
   padding: 15px 18px;
-  border: 1px dashed var(--lut-border);
+  border: 1px dashed var(--lut-accent);
   border-radius: 10px;
-  background: var(--lut-inset);
+  background: var(--lut-surface);
   color: var(--lut-ink);
   text-align: start;
 }
@@ -68,9 +68,8 @@
   place-items: center;
   width: 42px;
   height: 42px;
-  border: 1px solid var(--lut-border);
   border-radius: 10px;
-  background: var(--lut-surface);
+  background: var(--lut-accent-soft);
   color: var(--lut-accent);
   font-size: 22px;
 }
@@ -164,9 +163,9 @@
 .lut-transfer__result { grid-template-columns: auto 1fr; align-items: baseline; gap: 10px; }
 .lut-transfer__result small { display: block; margin-top: 3px; }
 .lut-transfer__result p { margin: 4px 0 0; line-height: 1.55; }
-.lut-transfer__result > .anticon { color: var(--lut-accent); }
-.lut-transfer__result.is-error { border-inline-start: 3px solid #cb653e; background: var(--lut-inset); }
-.lut-transfer__result.is-error > .anticon { color: #c45c35; }
+.lut-transfer__result > .anticon { color: var(--lut-success); }
+.lut-transfer__result.is-error { border-inline-start: 3px solid var(--lut-danger); background: var(--lut-danger-soft); }
+.lut-transfer__result.is-error > .anticon { color: var(--lut-danger); }
 .lut-transfer__guide {
   display: inline-flex;
   align-items: center;

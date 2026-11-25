@@ -180,124 +180,62 @@ html, body {
   gap: 14px;
 }
 
-.home-grid { gap: 20px; }
-.home-camera, .home-tool {
+.hero-card {
   position: relative;
-  box-sizing: border-box;
-  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   overflow: hidden;
-  text-align: start;
-  isolation: isolate;
-  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
-}
-.home-camera:focus-visible, .home-tool:focus-visible { outline: 3px solid #257f70; outline-offset: 3px; }
-.home-camera {
-  display: flex;
-  align-items: center;
-  min-height: 168px;
+  width: 100%;
+  min-height: 164px;
   padding: 20px;
-  border: 1px solid #c9d5ce;
-  border-radius: 19px;
-  background: linear-gradient(110deg, #f0f3ea 9%, #e4ebe2 60%, #d5ded5);
-  color: #243b34;
+  border: 1px solid #dbe3ef;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ffffff 0%, #eff4fb 100%);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  text-align: left;
 }
-.home-camera__copy { display: grid; gap: 4px; width: 54%; z-index: 1; }
-.home-camera__model { display: inline-flex; align-items: center; gap: 6px; color: #4f635b; font: 650 11px/1.3 ui-monospace, monospace; letter-spacing: .035em; }
-.home-camera__copy strong { margin-top: 5px; font-size: clamp(21px, 5.5vw, 28px); font-weight: 700; line-height: 1.18; }
-.home-camera__copy small { color: #4c6156; font-size: 12px; line-height: 1.5; }
-.home-camera__arrow {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 28px;
-  margin-top: 8px;
-  border-radius: 7px;
-  color: white;
-  background: #294c40;
-  font-size: 15px;
+.hero-card__copy {
+  position: relative;
+  z-index: 1;
+  max-width: 58%;
 }
-.home-camera__visual { position: absolute; inset: 0 -4% 0 53%; display: grid; align-items: center; pointer-events: none; }
-.home-camera__visual img { display: block; width: 109%; transition: transform .23s ease; }
-.home-tools h2 { margin: 0 0 10px; color: #273c38; font-size: 17px; line-height: 1.4; font-weight: 700; }
-.home-tools__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.home-tool {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  padding: 15px;
-  border: 1px solid #d8dfdf;
-  border-radius: 15px;
-  background: #fff;
-  color: #253734;
+.hero-tag {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
 }
-.home-tool__icon {
-  display: grid;
-  place-items: center;
-  width: 37px;
-  height: 37px;
-  border-radius: 10px;
-  color: #4e6191;
-  background: #e9edf8;
-  font-size: 18px;
+.hero-tag.is-live {
+  background: var(--blue);
+  color: #ffffff;
 }
-.home-tool.is-audio .home-tool__icon { color: #926332; background: #f8ecdb; }
-.home-tool__arrow { position: absolute; top: 18px; right: 14px; font-size: 11px; color: #697b77; transition: transform .16s ease; }
-.home-tool__copy { display: grid; justify-items: start; gap: 4px; min-width: 0; }
-.home-tool__copy strong { font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
-.home-tool__copy small { color: #516560; font-size: 12px; line-height: 1.5; }
-.home-tool__badge {
-  margin-top: 3px;
-  padding: 1px 6px;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-  color: #356250;
-  font-size: 10px;
-  font-weight: 650;
-  line-height: 1.5;
+.hero-card__copy strong {
+  display: block;
+  margin-top: 12px;
+  font-size: 22px;
+  font-weight: 750;
+  color: var(--ink);
+  letter-spacing: -0.4px;
 }
-.home-tool.is-lut {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  min-height: 90px;
-  gap: 14px;
-  padding: 16px 38px 16px 16px;
-  border-color: #23483e;
-  background: #24493f;
-  color: #f6faf4;
+.hero-card__copy small {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
 }
-.home-tool.is-lut .home-tool__icon { flex: none; width: 56px; height: 54px; background: #31584e; }
-.home-tool.is-lut .home-tool__copy strong { font-size: 18px; }
-.home-tool.is-lut .home-tool__copy small, .home-tool.is-lut .home-tool__arrow, .home-tool.is-lut .home-tool__badge { color: #d1e5db; }
-.home-tool.is-lut .home-tool__arrow { top: calc(50% - 6px); right: 18px; }
-.home-lut-samples { width: 35px; height: 33px; position: relative; }
-.home-lut-samples i { position: absolute; width: 21px; height: 26px; left: 2px; bottom: 1px; border-radius: 4px; transform-origin: 4px 22px; transition: transform .2s ease; }
-.home-lut-samples i:nth-child(1) { background: #82b7a0; transform: rotate(-13deg); }
-.home-lut-samples i:nth-child(2) { background: #e2bb81; transform: rotate(10deg); }
-.home-lut-samples i:nth-child(3) { background: #d88c75; transform: rotate(33deg); }
-@media (hover: hover) and (pointer: fine) {
-  .home-camera:hover, .home-tool:hover { transform: translateY(-2px); box-shadow: 0 5px 14px #12362915; border-color: #719487; }
-  .home-camera:hover .home-camera__visual img { transform: translateX(-2%) rotate(-1deg); }
-  .home-tool:hover .home-tool__arrow { transform: translateX(2px); }
-  .home-tool.is-lut:hover .home-lut-samples i:nth-child(1) { transform: rotate(-22deg); }
-  .home-tool.is-lut:hover .home-lut-samples i:nth-child(3) { transform: rotate(41deg); }
-}
-.mobile-shell button:is(.home-camera, .home-tool):active:not(:disabled) { transform: scale(.98); }
-.home-camera:active { background: #e0e9dc; }
-.home-tool:active:not(.is-lut) { background: #f2f6f3; }
-.home-tool.is-lut:active { background: #1b3d34; }
-@media (max-width: 350px) {
-  .home-camera { padding: 16px; }
-  .home-tools__grid { grid-template-columns: minmax(0, 1fr); }
-  .home-tool:not(.is-lut) { grid-template-columns: auto 1fr; align-items: center; padding-right: 30px; }
-  .home-tool:not(.is-lut) .home-tool__arrow { top: calc(50% - 6px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .home-camera, .home-tool, .home-camera__visual img, .home-tool__arrow, .home-lut-samples i { transition: none; }
-  .mobile-shell button:is(.home-camera, .home-tool):is(:hover, :active):not(:disabled),
-  .home-camera:hover .home-camera__visual img, .home-tool:hover .home-tool__arrow { transform: none; }
-  .home-tool.is-lut:hover .home-lut-samples i:nth-child(1) { transform: rotate(-13deg); }
-  .home-tool.is-lut:hover .home-lut-samples i:nth-child(3) { transform: rotate(33deg); }
+.hero-card__visual {
+  position: absolute;
+  right: -8px;
+  bottom: -14px;
+  width: 48%;
+  height: 115%;
+  background: url('./assets/camera/dc-s5-front.webp') center / contain no-repeat;
+  filter: drop-shadow(0 8px 14px rgba(15, 23, 42, 0.14));
 }
 
 .menu-card {

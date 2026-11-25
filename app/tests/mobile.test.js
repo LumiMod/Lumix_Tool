@@ -104,6 +104,12 @@ test('mobileApi encodes PCM, scans uncached memory, allocates slots, and renders
     const settingsHtml = renderToStaticMarkup(React.createElement(Settings, { device: { env: {}, locked: false, api: {} } }));
     assert.match(settingsHtml, /给作者赞赏/);
     assert.match(settingsHtml, /id="btnSettingsStar"/);
+    assert.match(settingsHtml, /暂未开发/);
+    assert.match(settingsHtml, /简体中文/);
+    assert.match(settingsHtml, /English/);
+    assert.match(settingsHtml, /日本語/);
+
+    assert.match(homeHtml, /id="headerDevicePill"[\s\S]*id="headerSettingsBtn"/);
 
     globalThis.history = { state: { tool: 'camera' } };
     const cameraHtml = renderToStaticMarkup(React.createElement(MobileApp));
@@ -117,6 +123,31 @@ test('mobileApi encodes PCM, scans uncached memory, allocates slots, and renders
     assert.match(audioHtml, /对焦提示音/);
     assert.match(audioHtml, /电子快门·单张/);
     assert.match(audioHtml, /自拍倒计时/);
+
+    globalThis.history = { state: { tool: 'settings' } };
+    const mobileSettingsHtml = renderToStaticMarkup(React.createElement(MobileApp));
+    assert.match(mobileSettingsHtml, /暂未开发/);
+    assert.match(mobileSettingsHtml, /id="btnMobileSettingsStar"/);
+    assert.match(mobileSettingsHtml, /简体中文/);
+    assert.match(mobileSettingsHtml, /English/);
+    assert.match(mobileSettingsHtml, /日本語/);
+
+    const enHomeHtml = renderToStaticMarkup(React.createElement(MobileApp, { initialLang: 'en' }));
+    assert.match(enHomeHtml, /OTA Updates/);
+    assert.match(enHomeHtml, /Coming soon/);
+
+    const jaHomeHtml = renderToStaticMarkup(React.createElement(MobileApp, { initialLang: 'ja' }));
+    assert.match(jaHomeHtml, /OTA アップデート/);
+    assert.match(jaHomeHtml, /未開発/);
+
+    // First-launch LanguagePicker appears when localStorage has no saved language
+    globalThis.localStorage = { getItem: () => null, setItem() {} };
+    const firstLaunchHtml = renderToStaticMarkup(React.createElement(MobileApp));
+    assert.match(firstLaunchHtml, /id="langPickerTitle"/);
+    assert.match(firstLaunchHtml, /data-lang="zh"/);
+    assert.match(firstLaunchHtml, /data-lang="en"/);
+    assert.match(firstLaunchHtml, /data-lang="ja"/);
+    delete globalThis.localStorage;
     delete globalThis.history;
   } finally {
     delete globalThis.window;

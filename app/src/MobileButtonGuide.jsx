@@ -1,16 +1,6 @@
 import { useEffect, useState } from 'react';
 import cameraBack from './assets/camera/dc-s5-back.webp';
-
-const keys = [
-  { label: '回放 ▶', x: '11.94%', y: '35.86%' },
-  { label: 'AF-ON', x: '77.04%', y: '31.82%' },
-];
-const frames = [
-  { title: '先将相机关机', detail: '找到机背的回放键和 AF-ON 键。', duration: 1400 },
-  { title: '同时按住两个键', detail: '两根手指一起按下，先别松手。', duration: 1900 },
-  { title: '保持按住，再拨到 ON', detail: '两键继续按着，同时拨动机顶的电源开关。', duration: 2300 },
-  { title: '开机后松开双键', detail: '用 OTG 数据线连接手机，再点「连接相机」。' },
-];
+import { useI18n } from './i18n';
 
 function PowerLever({ on }) {
   return <svg className={'guide-dial' + (on ? ' is-on' : '')} viewBox="0 0 106 70" aria-hidden="true">
@@ -27,6 +17,18 @@ function PowerLever({ on }) {
 }
 
 export default function MobileButtonGuide() {
+  const { t } = useI18n();
+  const keys = [
+    { label: t('guide.keyPlay'), x: '11.94%', y: '35.86%' },
+    { label: t('guide.keyAfon'), x: '77.04%', y: '31.82%' },
+  ];
+  const frames = [
+    { title: t('guide.f0.t'), detail: t('guide.f0.d'), duration: 1400 },
+    { title: t('guide.f1.t'), detail: t('guide.f1.d'), duration: 1900 },
+    { title: t('guide.f2.t'), detail: t('guide.f2.d'), duration: 2300 },
+    { title: t('guide.f3.t'), detail: t('guide.f3.d') },
+  ];
+
   const [frame, setFrame] = useState(0);
   const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   useEffect(() => {
@@ -38,15 +40,15 @@ export default function MobileButtonGuide() {
   return <div className="white-card button-demo" data-frame={frame} data-hold={frame === 1 || frame === 2}>
     <div className="guide-stage">
       <div className="guide-photo">
-        <img src={cameraBack} width="1080" height="792" alt="DC-S5 机背：回放键在 LVF 键左侧，AF-ON 在机背右上方。" />
+        <img src={cameraBack} width="1080" height="792" alt="LUMIX DC-S5" />
         {keys.map(key => <span key={key.label} className="guide-ring" aria-hidden="true"
           style={{ left: key.x, top: key.y }}><span className="guide-label">{key.label}</span></span>)}
       </div>
     </div>
     <div className="guide-motion">
       <div aria-live="polite">
-        <strong>{reducedMotion ? '同时按住两键，再拨到 ON' : frames[frame].title}</strong>
-        <p>{reducedMotion ? '相机先关机。按住回放与 AF-ON 不放，拨到 ON 后松手，再连接 OTG 数据线。' : frames[frame].detail}</p>
+        <strong>{reducedMotion ? t('guide.reduced.t') : frames[frame].title}</strong>
+        <p>{reducedMotion ? t('guide.reduced.d') : frames[frame].detail}</p>
       </div>
       <figure><PowerLever on={frame >= 2} /></figure>
     </div>

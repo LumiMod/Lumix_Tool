@@ -3,6 +3,7 @@ import {
   CheckCircleFilled, UndoOutlined, UnlockOutlined, UsbOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { useState } from 'react';
+import { useI18n } from '../i18n';
 import './OpenGate.css';
 
 const { Text, Paragraph } = Typography;
@@ -31,7 +32,12 @@ export default function OpenGate({
 }
 
 function DesktopOpenGate({ device }) {
+  const { t } = useI18n();
   const { api, device: cameraInfo = {}, busy, progress, locked, env, navigate } = device || {};
+  const localFormats = [
+    { id: 'open', name: t('og.openName'), resolution: '5952 × 3968', ratio: '3:2' },
+    { id: 'wide', name: t('og.wideName'), resolution: '5888 × 3312', ratio: '16:9' },
+  ];
   const unlock = cameraInfo?.unlock;
   const connected = !!cameraInfo?.connected && !cameraInfo?.error;
   const supported = !!unlock?.supported;
@@ -55,23 +61,23 @@ function DesktopOpenGate({ device }) {
 
   const total = progress?.total || 19;
   const percent = working ? Math.round(((progress?.done || 0) / total) * 100) : 0;
-  const statusTag = !connected ? <Tag>未连接</Tag> : !supported ? <Tag color="error">固件不支持</Tag>
-    : unlocked ? <Tag color="success">已解锁</Tag> : <Tag color="default">未解锁</Tag>;
+  const statusTag = !connected ? <Tag>{t('status.disconnected')}</Tag> : !supported ? <Tag color="error">{t('og.unsupported')}</Tag>
+    : unlocked ? <Tag color="success">{t('og.unlocked')}</Tag> : <Tag color="default">{t('og.locked')}</Tag>;
 
   return <Flex vertical gap={16} className="opengate">
-    <Card title="可解锁规格" extra={<Tag color="blue">DC-S5 一代 · 固件 2.9</Tag>}>
+    <Card title={t('og.title')} extra={<Tag color="blue">{t('og.tag')}</Tag>}>
       <Descriptions column={2} size="small" bordered items={[
-        { key: 'camera', label: '适用机型', children: camera },
-        ...formats.map(format => ({
+        { key: 'camera', label: t('og.camera'), children: t('og.cameraVal') },
+        ...localFormats.map(format => ({
           key: format.id, label: format.name,
           children: [format.resolution, format.ratio, frameRate, codec].join(' · '),
         })),
-        { key: 'duration', label: '录制时长', children: '所有限时模式解除时长限制' },
+        { key: 'duration', label: t('og.duration'), children: t('og.durationVal') },
       ]} />
-      <Paragraph type="secondary" style={{ margin: '12px 0 0' }}>{note}</Paragraph>
+      <Paragraph type="secondary" style={{ margin: '12px 0 0' }}>{t('og.note')}</Paragraph>
     </Card>
 
-    <Card title="解锁状态" extra={<span id="unlockState">{statusTag}</span>}>
+    <Card title={t('og.statusTitle')} extra={<span id="unlockState">{statusTag}</span>}>
       {!connected && <Alert type="info" showIcon title="尚未连接相机"
         description={cameraInfo?.pythonMissing || (env && !env.python)
           ? '先准备好 Python 运行环境，再进入服务模式连接相机。'
@@ -120,6 +126,7 @@ function DesktopOpenGate({ device }) {
 }
 
 function MobileOpenGate({ deviceState, busy, progress, onOpenConnect, onSetUnlock }) {
+  const { t } = useI18n();
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const connected = !!deviceState?.connected;
@@ -127,6 +134,10 @@ function MobileOpenGate({ deviceState, busy, progress, onOpenConnect, onSetUnloc
   const supported = !!unlockInfo?.supported;
   const unlocked = !!unlockInfo?.unlocked;
   const working = busy && (progress?.phase === 'unlock' || progress?.phase === 'lock');
+  const localFormats = [
+    { id: 'open', name: t('og.openName'), resolution: '5952 × 3968', ratio: '3:2' },
+    { id: 'wide', name: t('og.wideName'), resolution: '5888 × 3312', ratio: '16:9' },
+  ];
 
   async function runUnlock(enable) {
     if (!onSetUnlock || busy) return;
@@ -134,14 +145,14 @@ function MobileOpenGate({ deviceState, busy, progress, onOpenConnect, onSetUnloc
     setErrorMsg('');
     const res = await onSetUnlock(enable);
     if (!res?.ok) {
-      setErrorMsg(res?.error || '操作未成功，请检查连接后重试');
+      setErrorMsg(res?.error || 'Failed');
     }
   }
 
-  return <section className="gate-spec" aria-label="片门全开解锁">
+  return <section className="gate-spec" aria-label={t('mobile.home.formatsTitle')}>
     <div className="gate-card">
       <div className="gate-spec__comparison">
-        {formats.map(format => <figure key={format.id}>
+        {localFormats.map(format => <figure key={format.id}>
           <div className="gate-spec__stage" aria-hidden="true">
             <div className={'gate-spec__frame' + (unlocked ? ' is-armed' : '')} style={{ aspectRatio: format.ratio.replace(':', '/') }}>
               <span>{format.ratio}</span>
@@ -158,23 +169,23 @@ function MobileOpenGate({ deviceState, busy, progress, onOpenConnect, onSetUnloc
     <div className="gate-card">
       <ul className="gate-perks">
         <li>
-          <span>6K / 5.9K 规格</span>
+          <span>{t('og.perksSpec')}</span>
           <strong>23.98p · 10-bit MOV</strong>
         </li>
         <li>
-          <span>录制时长</span>
-          <strong>解除 30 分钟限制</strong>
+          <span>{t('og.duration')}</span>
+          <strong>{t('og.durationShort')}</strong>
         </li>
         <li>
-          <span>安全可逆</span>
-          <strong>正常开关机保留 · 拔电池还原</strong>
+          <span>{t('og.perksSafe')}</span>
+          <strong>{t('og.perksSafeVal')}</strong>
         </li>
       </ul>
     </div>
 
     {connected && !supported && <div role="alert" className="gate-notice is-error">
       <WarningOutlined />
-      <span>仅支持初代 DC-S5 官方 2.9 固件</span>
+      <span>{t('og.only29')}</span>
     </div>}
 
     {errorMsg && <div role="alert" className="gate-notice is-error">
@@ -189,32 +200,32 @@ function MobileOpenGate({ deviceState, busy, progress, onOpenConnect, onSetUnloc
     </div>}
 
     {!connected && <button id="unlockConnectBtn" className="primary-btn" disabled={busy} onClick={() => onOpenConnect?.()}>
-      <UsbOutlined />先连接相机
+      <UsbOutlined />{t('og.connectFirst')}
     </button>}
 
     {connected && supported && !unlocked && <button id="btnUnlockCamera" className="primary-btn" disabled={busy} onClick={() => runUnlock(true)}>
-      <UnlockOutlined />{busy ? '正在解锁…' : '一键解锁'}
+      <UnlockOutlined />{busy ? t('og.unlocking') : t('og.unlockBtn')}
     </button>}
 
     {connected && supported && unlocked && <div className="gate-armed">
       <div className="gate-armed__box" role="status">
         <CheckCircleFilled />
         <div>
-          <strong>已解锁，可直接拔下数据线</strong>
-          <p>进入相机 MENU → 视频 → 录制质量 (MOV) 最底部选择</p>
+          <strong>{t('og.armedTitle')}</strong>
+          <p>{t('og.armedDesc')}</p>
         </div>
       </div>
 
       {!confirmRestore ? (
         <button id="btnPromptRestoreUnlock" className="ghost-btn" disabled={busy} onClick={() => setConfirmRestore(true)}>
-          <UndoOutlined />恢复原厂默认
+          <UndoOutlined />{t('og.restoreBtn')}
         </button>
       ) : (
         <div className="gate-confirm">
-          <span>确认恢复为原厂默认状态？</span>
+          <span>{t('og.confirmRestore')}</span>
           <div>
-            <button id="btnConfirmRestoreUnlock" className="primary-btn is-compact" disabled={busy} onClick={() => runUnlock(false)}>确认</button>
-            <button className="ghost-btn is-compact" disabled={busy} onClick={() => setConfirmRestore(false)}>取消</button>
+            <button id="btnConfirmRestoreUnlock" className="primary-btn is-compact" disabled={busy} onClick={() => runUnlock(false)}>{t('mobile.audio.confirm')}</button>
+            <button className="ghost-btn is-compact" disabled={busy} onClick={() => setConfirmRestore(false)}>{t('mobile.audio.cancel')}</button>
           </div>
         </div>
       )}

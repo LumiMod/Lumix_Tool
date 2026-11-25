@@ -111,3 +111,73 @@ body { background: #fff; }
   .workspace { padding: 20px 18px; }
   .app-shell .device-header { padding-inline: 18px; }
 }
+
+/* First-launch Language Picker Overlay */
+.lang-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.56);
+  backdrop-filter: blur(4px);
+}
+.lang-dialog {
+  width: min(100%, 380px);
+  padding: 24px 22px;
+  border-radius: 18px;
+  background: var(--ant-color-bg-elevated, #ffffff);
+  color: var(--ant-color-text, #0f172a);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+  text-align: center;
+}
+.lang-dialog__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 22px;
+}
+.lang-dialog h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+.lang-dialog p {
+  margin: 6px 0 18px;
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.5;
+}
+.lang-dialog__list {
+  display: grid;
+  gap: 10px;
+}
+.lang-choice-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.lang-choice-btn:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+.lang-choice-btn span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}

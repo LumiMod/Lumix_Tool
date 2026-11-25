@@ -547,7 +547,7 @@ html, body {
 .compact-slots {
   display: grid;
   gap: 6px;
-  max-height: 300px;
+  max-height: 340px;
   overflow-y: auto;
   padding-right: 2px;
 }
@@ -585,9 +585,23 @@ html, body {
   color: var(--muted);
   min-width: 24px;
 }
+.slot-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
 .slot-label {
   font-size: 13.5px;
   font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.slot-note {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, App, Button, Card, Input, Space, Table, Tag, Typography } from 'antd';
 import { EditOutlined, UndoOutlined } from '@ant-design/icons';
-import { catalog, soundName } from './catalog';
+import { catalog, confirmedCatalog, orderedCatalog, SOUND_PRESETS, soundName } from './catalog';
 import { originalSamples, slotState } from './state.mjs';
 
 export default function SoundTable({ device, disabled, writeBlocked = false, selected, onSelect, onReplace, onRestore }) {
@@ -11,7 +11,7 @@ export default function SoundTable({ device, disabled, writeBlocked = false, sel
   const originals = table?.originals || {};
   const labels = table?.labels || {};
   const entries = new Map((table?.entries || []).map(entry => [entry.index, entry]));
-  const rows = [catalog[1], ...catalog.filter(entry => entry.index !== 1)].map(entry => ({ ...entry, ...entries.get(entry.index) }));
+  const rows = orderedCatalog.map(entry => ({ ...entry, ...entries.get(entry.index) }));
 
   function rename(index) {
     let label = labels[index] || '';
@@ -33,9 +33,16 @@ export default function SoundTable({ device, disabled, writeBlocked = false, sel
     });
   }
 
-  return <Card title="相机音效 · 28 项" extra={<Button id="restoreAll" icon={<UndoOutlined />} disabled={disabled || writeBlocked || renaming || !device.ready || !Object.keys(originals).length} onClick={() => onRestore(null)}>全部恢复</Button>}>
+  return <Card title={`相机音效 · 28 项（已确认 ${confirmedCatalog.length} 项）`} extra={<Button id="restoreAll" icon={<UndoOutlined />} disabled={disabled || writeBlocked || renaming || !device.ready || !Object.keys(originals).length} onClick={() => onRestore(null)}>全部恢复</Button>}>
     <Space orientation="vertical" size="middle" className="full-width">
-      <Typography.Text type="secondary">勾选多个编号可批量写入同一段声音，用于二分定位触发动作。每项独立存放；原始表项与名称按机身版本保存在本机。</Typography.Text>
+      <Typography.Text type="secondary">已内置 {confirmedCatalog.length} 项实测触发动作（电子快门模式），置顶显示；未确认编号可勾选多项批量写入以二分定位，或点编辑按钮保存本机名称。</Typography.Text>
+      <Space wrap size="small" aria-label="快捷选择分组">
+        {SOUND_PRESETS.map(preset => (
+          <Button key={preset.id} size="small" disabled={disabled || renaming} onClick={() => onSelect(preset.indices)}>{preset.label}</Button>
+        ))}
+        <Button size="small" disabled={disabled || renaming} onClick={() => onSelect(confirmedCatalog.map(item => item.index))}>全部已确认</Button>
+        <Button size="small" type="text" disabled={disabled || renaming || !selected.length} onClick={() => onSelect([])}>清空选择</Button>
+      </Space>
       {table && !table.ok && <Alert type="error" showIcon title={table.error} />}
       <Table id="soundTable" size="small" rowKey="index" dataSource={rows} pagination={false} scroll={{ y: 420 }}
         onRow={record => ({ 'data-slot': record.index })}
@@ -43,7 +50,7 @@ export default function SoundTable({ device, disabled, writeBlocked = false, sel
         columns={[
           { title: '编号', dataIndex: 'index', width: 65, render: index => `#${index}` },
           { title: '名称 / 动作', key: 'name', render: (_, row) => <div>
-            <Space><Typography.Text strong={row.index === 1}>{soundName(row.index, labels)}</Typography.Text>
+            <Space><Typography.Text strong={row.confirmed}>{soundName(row.index, labels)}</Typography.Text>
               <Button size="small" type="text" data-action="rename" aria-label={`重命名 #${row.index}`} icon={<EditOutlined />} disabled={disabled || renaming || !device.ready} onClick={() => rename(row.index)} /></Space>
             {row.note && <div><Typography.Text type="secondary">{row.note}</Typography.Text></div>}
             {row.hex && !originals[row.index] && <div><Typography.Text type="warning">无法单独恢复（拔电池可恢复）</Typography.Text></div>}

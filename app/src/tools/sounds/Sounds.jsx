@@ -205,7 +205,7 @@ export default function Sounds({ device, active, navigate }) {
         <div className="sound-target"><Text type="secondary">目标音效</Text>
           <strong>{selected.length === 1 ? `#${selected[0]} · ${soundName(selected[0], labels)}` : selected.length ? `已选 ${selected.length} 项` : '尚未选择'}</strong>
         </div>
-        {selected.length > 1 && <p className="sound-target-ids">{selected.map(i => `#${i}`).join('、')}</p>}
+        {selected.length > 1 && <p className="sound-target-ids">{selected.length <= 3 ? selected.map(i => `#${i} ${soundName(i, labels)}`).join('、') : selected.map(i => `#${i}`).join('、')}</p>}
         {audio && <div className="sound-estimate"><Text type="secondary">{audio.duration.toFixed(2)} 秒 · 预计写入约 {Math.ceil(estimatedSeconds)} 秒{env?.mock ? `（模拟约 ${selected.length * 3} 秒）` : ''}</Text></div>}
         <details className="sound-memory-details"><summary>内存分配详情</summary>
         <Descriptions column={1} size="small" items={[

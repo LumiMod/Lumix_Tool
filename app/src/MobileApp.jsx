@@ -5,12 +5,12 @@ import {
   ArrowLeftOutlined, CheckCircleFilled, CloudUploadOutlined, DownloadOutlined,
   EditOutlined, ExpandOutlined, FolderOpenOutlined, PauseOutlined,
   PlayCircleOutlined, ReloadOutlined, RightOutlined, ScanOutlined,
-  SoundOutlined, UndoOutlined, UsbOutlined, WarningOutlined,
+  SoundOutlined, UsbOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import OpenGate from './tools/OpenGate';
 import { decodeAudio, MAX_SECONDS } from './tools/focus-sound/audio.mjs';
 import Waveform from './tools/focus-sound/Waveform';
-import { catalog, soundName } from './tools/sounds/catalog';
+import { catalog, confirmedCatalog, SOUND_PRESETS, soundName } from './tools/sounds/catalog';
 import { slotState } from './tools/sounds/state.mjs';
 import { BLOCK, liveRegions, memoryStats, planAllocation } from '../memory.mjs';
 import { applySoundBatch, invokeNative, restoreSoundBatch } from './mobileApi';
@@ -68,7 +68,7 @@ export default function MobileApp() {
   const busyRef = useRef(false);
 
   // Audio page state
-  const [slotTab, setSlotTab] = useState('focus'); // 'focus' | 'all'
+  const [slotTab, setSlotTab] = useState('known'); // 'known' | 'all'
   const [selected, setSelected] = useState([1]);
   const [audio, setAudio] = useState(null);
   const [audioError, setAudioError] = useState('');
@@ -152,7 +152,7 @@ export default function MobileApp() {
   const memoryMap = device?.memoryMap || null;
   const live = liveRegions(entries);
   const stats = memoryStats(memoryMap, entries);
-  const activeIndices = slotTab === 'focus' ? [1] : selected;
+  const activeIndices = selected;
   const plan = audio && activeIndices.length ? planAllocation(memoryMap, entries, activeIndices, audio.samples) : null;
 
   useEffect(() => { setBurnResult(null); }, [slotTab, selected]);
@@ -257,9 +257,9 @@ export default function MobileApp() {
   }
 
   const entryByIndex = new Map(entries.map(e => [e.index, e]));
-  const focusRow = { ...catalog[1], ...entryByIndex.get(1) };
-  const focusState = slotState(focusRow, originals[1]);
+  const knownRows = confirmedCatalog.map(item => ({ ...item, ...entryByIndex.get(item.index) }));
   const allRows = catalog.map(item => ({ ...item, ...entryByIndex.get(item.index) }));
+  const visibleRows = slotTab === 'known' ? knownRows : allRows;
 
   const pct = progress && progress.total > 0
     ? Math.min(100, Math.max(0, Math.round((progress.done / progress.total) * 100)))
@@ -333,7 +333,7 @@ export default function MobileApp() {
               id="audio"
               icon={<SoundOutlined />}
               title="相机音效替换"
-              subtitle="自定义对焦提示音与机身音效"
+              subtitle="自定义对焦、电子快门、录影等机身音效"
               badge={live.length ? `已改 ${live.length} 项` : null}
               openTool={openTool}
             />
@@ -432,11 +432,11 @@ export default function MobileApp() {
                   type="button"
                   role="tab"
                   disabled={isBusy}
-                  aria-selected={slotTab === 'focus'}
-                  className={slotTab === 'focus' ? 'is-active' : ''}
-                  onClick={() => setSlotTab('focus')}
+                  aria-selected={slotTab === 'known'}
+                  className={slotTab === 'known' ? 'is-active' : ''}
+                  onClick={() => setSlotTab('known')}
                 >
-                  对焦音
+                  已确认 ({confirmedCatalog.length})
                 </button>
                 <button
                   type="button"
@@ -451,82 +451,78 @@ export default function MobileApp() {
               </div>
             </div>
 
-            {slotTab === 'focus' ? (
-              <div className="focus-slot-box">
-                <div>
-                  <strong>半按快门对焦提示音</strong>
-                  <small>当前状态：{focusState}</small>
-                </div>
-                {ready && originals[1] && focusState === '已替换' && (
-                  <button
-                    type="button"
-                    className="ghost-btn is-compact"
-                    disabled={isBusy || firmwareBlocked}
-                    onClick={() => setConfirmRestoreTarget(1)}
-                  >
-                    <UndoOutlined />恢复默认
+            {slotTab === 'known' ? (
+              <div className="quick-pills">
+                {SOUND_PRESETS.map(preset => (
+                  <button key={preset.id} type="button" disabled={isBusy} onClick={() => setSelected(preset.indices)}>
+                    {preset.label}
                   </button>
+                ))}
+                <button type="button" disabled={isBusy} onClick={() => setSelected([])}>清空</button>
+                {ready && Object.keys(originals).length > 0 && (
+                  <button type="button" className="is-restore" onClick={() => setConfirmRestoreTarget(null)}>恢复全部</button>
                 )}
               </div>
             ) : (
-              <>
-                <div className="quick-pills">
-                  <button type="button" disabled={isBusy} onClick={() => setSelected(Array.from({ length: 14 }, (_, i) => i))}>前 14 项</button>
-                  <button type="button" disabled={isBusy} onClick={() => setSelected(Array.from({ length: 14 }, (_, i) => i + 14))}>后 14 项</button>
-                  <button type="button" disabled={isBusy} onClick={() => setSelected(Array.from({ length: 28 }, (_, i) => i))}>全选</button>
-                  <button type="button" disabled={isBusy} onClick={() => setSelected([])}>清空</button>
-                  {ready && Object.keys(originals).length > 0 && (
-                    <button type="button" className="is-restore" onClick={() => setConfirmRestoreTarget(null)}>恢复全部</button>
-                  )}
-                </div>
-
-                <div className="compact-slots">
-                  {allRows.map(row => {
-                    const checked = selected.includes(row.index);
-                    const st = slotState(row, originals[row.index]);
-                    const isEdit = editingSlot === row.index;
-                    return <div key={row.index} data-slot={row.index} className={'compact-slot' + (checked ? ' is-checked' : '')}>
-                      <label className="compact-slot__row">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={isBusy}
-                          onChange={() => toggleSlotSelection(row.index)}
-                        />
-                        <span className="slot-num">#{row.index}</span>
-                        <span className="slot-label">{soundName(row.index, labels)}</span>
-                        {st === '已替换' && <em className="mini-tag">已改</em>}
-                      </label>
-                      <div className="compact-slot__btns">
-                        {ready && <button
-                          type="button"
-                          aria-label={`备注 #${row.index}`}
-                          onClick={() => { setEditingSlot(isEdit ? null : row.index); setEditingText(labels[row.index] || ''); }}
-                        >
-                          <EditOutlined />
-                        </button>}
-                        {ready && originals[row.index] && st === '已替换' && (
-                          <button type="button" onClick={() => setConfirmRestoreTarget(row.index)}>恢复</button>
-                        )}
-                      </div>
-                      {isEdit && <div className="rename-inline">
-                        <input
-                          type="text"
-                          maxLength={80}
-                          value={editingText}
-                          placeholder="输入备注名称"
-                          onChange={e => setEditingText(e.target.value)}
-                        />
-                        <button type="button" onClick={() => saveSlotLabel(row.index)}>保存</button>
-                      </div>}
-                    </div>;
-                  })}
-                </div>
-              </>
+              <div className="quick-pills">
+                <button type="button" disabled={isBusy} onClick={() => setSelected(Array.from({ length: 14 }, (_, i) => i))}>前 14 项</button>
+                <button type="button" disabled={isBusy} onClick={() => setSelected(Array.from({ length: 14 }, (_, i) => i + 14))}>后 14 项</button>
+                <button type="button" disabled={isBusy} onClick={() => setSelected(Array.from({ length: 28 }, (_, i) => i))}>全选</button>
+                <button type="button" disabled={isBusy} onClick={() => setSelected([])}>清空</button>
+                {ready && Object.keys(originals).length > 0 && (
+                  <button type="button" className="is-restore" onClick={() => setConfirmRestoreTarget(null)}>恢复全部</button>
+                )}
+              </div>
             )}
 
+            <div className="compact-slots">
+              {visibleRows.map(row => {
+                const checked = selected.includes(row.index);
+                const st = slotState(row, originals[row.index]);
+                const isEdit = editingSlot === row.index;
+                return <div key={row.index} data-slot={row.index} className={'compact-slot' + (checked ? ' is-checked' : '')}>
+                  <label className="compact-slot__row">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={isBusy}
+                      onChange={() => toggleSlotSelection(row.index)}
+                    />
+                    <span className="slot-num">#{row.index}</span>
+                    <span className="slot-copy">
+                      <span className="slot-label">{soundName(row.index, labels)}</span>
+                      {row.note && <small className="slot-note">{row.note}</small>}
+                    </span>
+                    {st === '已替换' && <em className="mini-tag">已改</em>}
+                  </label>
+                  <div className="compact-slot__btns">
+                    {ready && <button
+                      type="button"
+                      aria-label={`备注 #${row.index}`}
+                      onClick={() => { setEditingSlot(isEdit ? null : row.index); setEditingText(labels[row.index] || ''); }}
+                    >
+                      <EditOutlined />
+                    </button>}
+                    {ready && originals[row.index] && st === '已替换' && (
+                      <button type="button" onClick={() => setConfirmRestoreTarget(row.index)}>恢复</button>
+                    )}
+                  </div>
+                  {isEdit && <div className="rename-inline">
+                    <input
+                      type="text"
+                      maxLength={80}
+                      value={editingText}
+                      placeholder={catalog[row.index].name}
+                      onChange={e => setEditingText(e.target.value)}
+                    />
+                    <button type="button" onClick={() => saveSlotLabel(row.index)}>保存</button>
+                  </div>}
+                </div>;
+              })}
+            </div>
+
             {confirmRestoreTarget !== undefined && <div className="confirm-bar">
-              <span>{confirmRestoreTarget === null ? '确认恢复全部音效为原厂默认？' : `确认恢复 #${confirmRestoreTarget} 原厂音效？`}</span>
+              <span>{confirmRestoreTarget === null ? '确认恢复全部音效为原厂默认？' : `确认恢复 #${confirmRestoreTarget} ${soundName(confirmRestoreTarget, labels)}？`}</span>
               <div>
                 <button type="button" className="primary-btn is-compact" disabled={isBusy} onClick={() => handleRestoreSounds(confirmRestoreTarget)}>确认</button>
                 <button type="button" className="ghost-btn is-compact" disabled={isBusy} onClick={() => setConfirmRestoreTarget(undefined)}>取消</button>
@@ -582,8 +578,8 @@ export default function MobileApp() {
               <CloudUploadOutlined />
               {!audio
                 ? '请先选择音频'
-                : slotTab === 'focus'
-                  ? '写入对焦提示音'
+                : activeIndices.length === 1
+                  ? `写入 #${activeIndices[0]} ${soundName(activeIndices[0], labels)}`
                   : `写入所选音效（${activeIndices.length} 项）`}
             </button>
           )}

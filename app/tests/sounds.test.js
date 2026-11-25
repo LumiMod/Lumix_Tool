@@ -173,6 +173,31 @@ test('renderer state uses saved duration and recognizes both scratch layouts', a
   assert.equal(slotState({}, undefined), '未知');
 });
 
+test('sound catalog exposes 10 confirmed DC-S5 v2.9 triggers and presets', async () => {
+  const { catalog, confirmedCatalog, orderedCatalog, SOUND_PRESETS, soundName } = await import('../src/tools/sounds/catalog.js');
+  assert.equal(catalog.length, 28);
+  assert.equal(confirmedCatalog.length, 10);
+  assert.equal(orderedCatalog.length, 28);
+  assert.deepEqual(
+    confirmedCatalog.map(item => item.index),
+    [1, 2, 3, 20, 21, 22, 8, 10, 0, 11],
+  );
+  assert.deepEqual(
+    orderedCatalog.slice(0, 10).map(item => item.index),
+    [1, 2, 3, 20, 21, 22, 8, 10, 0, 11],
+  );
+  assert.equal(soundName(0), '定时拍照模式 2');
+  assert.equal(soundName(1), 'AF 蜂鸣器音调 1');
+  assert.equal(soundName(8), '开始视频录制');
+  assert.equal(soundName(10), '结束视频录制');
+  assert.equal(soundName(11), '连拍模式 2');
+  assert.equal(soundName(20), '电子快门音调 1');
+  assert.equal(soundName(22), '电子快门音调 3');
+  assert.equal(soundName(1, { 1: '自定义对焦音' }), '自定义对焦音');
+  assert.equal(soundName(4), '未命名 #4');
+  assert.deepEqual(SOUND_PRESETS.map(p => p.indices), [[1, 2, 3], [20, 21, 22], [8, 10], [0, 11]]);
+});
+
 test('unverified firmware reports itself and refuses writes without touching the camera', async t => {
   const runtime = fixture(t);
   fastOperations(runtime);

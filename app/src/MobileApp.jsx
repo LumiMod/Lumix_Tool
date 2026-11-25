@@ -2,13 +2,14 @@ import { useAudioPreview } from './hooks/useAudioPreview';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConfigProvider, theme } from 'antd';
 import {
-  ArrowLeftOutlined, CheckCircleFilled, CloudSyncOutlined, CloudUploadOutlined,
+  ArrowLeftOutlined, BgColorsOutlined, CheckCircleFilled, CloudSyncOutlined, CloudUploadOutlined,
   DownloadOutlined, EditOutlined, ExpandOutlined, FolderOpenOutlined,
   GithubOutlined, GlobalOutlined, PauseOutlined, PlayCircleOutlined,
   ReloadOutlined, RightOutlined, ScanOutlined, SettingOutlined,
   SoundOutlined, StarOutlined, UndoOutlined, UsbOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import OpenGate from './tools/OpenGate';
+import LutDirect from './tools/lut/LutDirect';
 import { decodeAudio, MAX_SECONDS } from './tools/focus-sound/audio.mjs';
 import Waveform from './tools/focus-sound/Waveform';
 import { catalog, COMMON_PRESETS, localizePreset, orderedCatalog, soundName, soundNote } from './tools/sounds/catalog';
@@ -35,6 +36,7 @@ function MobileAppShell() {
   const restartHint = t('mobile.audio.restartHint');
   const pages = {
     camera: t('nav.connection'),
+    lut: t('mobile.home.lutTitle'),
     formats: t('mobile.home.formatsTitle'),
     audio: t('mobile.home.audioTitle'),
     settings: t('settings.title'),
@@ -355,6 +357,14 @@ function MobileAppShell() {
 
           <div className="menu-card">
             <MenuEntry
+              id="lut"
+              icon={<BgColorsOutlined />}
+              title={t('mobile.home.lutTitle')}
+              subtitle={t('mobile.home.lutSub')}
+              badge={device?.lut?.enabled ? t('mobile.home.lutBadge') : null}
+              openTool={openTool}
+            />
+            <MenuEntry
               id="formats"
               icon={<ExpandOutlined />}
               title={t('mobile.home.formatsTitle')}
@@ -424,6 +434,20 @@ function MobileAppShell() {
             {checking ? t('mobile.camera.connecting') : device?.connected ? t('mobile.camera.refresh') : t('mobile.camera.connect')}
           </button>
         </section>}
+
+        {/* 实时 LUT 直出页 */}
+        {page === 'lut' && <LutDirect
+          mobile
+          deviceState={device}
+          busy={isBusy}
+          progress={progress}
+          onOpenConnect={() => openTool('camera')}
+          onSetLut={({ enable, mode, playbackFix }) => runExclusive(
+            enable ? t('lut.enabling') : t('lut.restoring'),
+            () => invokeNative('setLut', { enable, mode, playbackFix }),
+          )}
+          onSaveVlt={(filename, content) => invokeNative('saveVlt', { filename, content })}
+        />}
 
         {/* 片门全开解锁页 */}
         {page === 'formats' && <OpenGate

@@ -14,6 +14,7 @@ Commands:
 All writes are RAM-only; a battery pull restores stock behaviour.
 """
 import argparse
+import base64
 import json
 import os
 import struct
@@ -97,6 +98,24 @@ UNLOCK_PATCHES = (
 )
 
 CAP_WORD_ADDR = 0x868261B6
+
+# Real-Time JPEG Direct-Output 3D LUT (RAM-only, MC801 FW 2.9 verified)
+LUT_PAYLOADS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lut_payloads.json")
+LUT_PAYLOAD_ADDR = 0x86370000
+LUT_HOOK_ADDR = 0x868243C0
+LUT_HOOK_ORIG = bytes.fromhex("2de9f043")   # stmdb sp!, {r4-r9, lr}
+LUT_HOOK_PATCH = bytes.fromhex("4bf71eb6")  # b.w 0x86370000
+LUT_HOOK_NEXT_ADDR = 0x868243C4
+LUT_HOOK_NEXT_ANCHOR = bytes.fromhex("04460068")  # mov r4, r0; ldr r0, [r0, #0]
+LUT_PLAYBACK_PREV_ADDR = 0x866AE76E
+LUT_PLAYBACK_PREV_ANCHOR = bytes.fromhex("0842")  # tst r0, r1
+LUT_PLAYBACK_ADDR = 0x866AE770
+LUT_PLAYBACK_ORIG = bytes.fromhex("13d0")   # beq.n 0x866ae79a
+LUT_PLAYBACK_PATCH = bytes.fromhex("13e0")  # b.n   0x866ae79a
+LUT_LOG_ADDR = 0x8F300000
+LUT_VA_MON_ADDR = 0x88BDC310
+LUT_VA_ID_ADDR = 0x88BDC330
+LUT_SLOTS_PTR_ADDR = 0x88A9D47C
 
 
 def read_bytes(svc, addr, n):
@@ -288,6 +307,124 @@ def apply_unlock(svc, enable):
     return {"ok": True, "unlocked": bool(enable), "verifiedWords": total, "logs": logs}
 
 
+def load_lut_payloads():
+    with open(LUT_PAYLOADS_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def inspect_lut(svc):
+    """Read-only: verify DC-S5 2.9 LUT hook anchors and detect current RAM state."""
+    info = {"supported": False, "enabled": False, "mode": "stock", "playbackFix": False}
+    try:
+        ver = read_body_version(svc)
+        if ver not in VERIFIED_BODY_VERSIONS:
+            raise UnsupportedFirmware("仅支持初代 DC-S5 (MC801) 固件 2.9")
+        hook_bytes = read_bytes(svc, LUT_HOOK_ADDR, 8)
+        play_bytes = read_bytes(svc, LUT_PLAYBACK_PREV_ADDR, 4)
+        hook_insn = hook_bytes[:4]
+        next_insn = hook_bytes[4:8]
+        prev_play = play_bytes[:2]
+        play_insn = play_bytes[2:4]
+        if next_insn != LUT_HOOK_NEXT_ANCHOR or prev_play != LUT_PLAYBACK_PREV_ANCHOR:
+            raise UnsupportedFirmware("固件 LUT 特征锚点不匹配，已拒绝写入")
+        if hook_insn not in (LUT_HOOK_ORIG, LUT_HOOK_PATCH):
+            raise UnsupportedFirmware("0x868243C0 指令未知 (%s)" % hook_insn.hex())
+        if play_insn not in (LUT_PLAYBACK_ORIG, LUT_PLAYBACK_PATCH):
+            raise UnsupportedFirmware("0x866AE770 指令未知 (%s)" % play_insn.hex())
+        enabled = hook_insn == LUT_HOOK_PATCH
+        playback_fix = play_insn == LUT_PLAYBACK_PATCH
+        mode = "stock"
+        if enabled:
+            payloads = load_lut_payloads()
+            fast_bin = base64.b64decode(payloads["fast"]["base64"])
+            lossless_bin = base64.b64decode(payloads["lossless"]["base64"])
+            cur_head = read_bytes(svc, LUT_PAYLOAD_ADDR, min(64, len(fast_bin)))
+            if cur_head == fast_bin[:len(cur_head)]:
+                mode = "fast"
+            elif cur_head == lossless_bin[:len(cur_head)]:
+                mode = "lossless"
+            else:
+                mode = "custom"
+        va_mon = struct.unpack_from("<I", read_bytes(svc, LUT_VA_MON_ADDR, 4), 0)[0]
+        va_id = struct.unpack_from("<I", read_bytes(svc, LUT_VA_ID_ADDR, 4), 0)[0]
+        info.update({
+            "supported": True,
+            "firmware": "MC801 2.9",
+            "enabled": enabled,
+            "mode": mode,
+            "playbackFix": playback_fix,
+            "viewAssistMonitor": int(va_mon),
+            "activeLutId": int(va_id) if va_id < 5 else 0,
+        })
+    except Exception as exc:
+        info["error"] = str(exc)
+    return info
+
+
+def apply_lut(svc, enable, mode="fast", playback_fix=True):
+    """Install or restore the RAM-only 3D LUT JPEG direct-output hook."""
+    if mode not in ("fast", "lossless"):
+        raise ValueError("mode must be fast or lossless")
+    status = inspect_lut(svc)
+    if not status.get("supported"):
+        raise UnsupportedFirmware(status.get("error") or "当前固件不支持 LUT 直出")
+
+    if not enable:
+        write_halfwords(svc, LUT_HOOK_ADDR, LUT_HOOK_ORIG)
+        write_halfwords(svc, LUT_PLAYBACK_ADDR, LUT_PLAYBACK_ORIG)
+        if read_bytes(svc, LUT_HOOK_ADDR, 4) != LUT_HOOK_ORIG:
+            raise RuntimeError("恢复 0x868243C0 校验失败")
+        if read_bytes(svc, LUT_PLAYBACK_ADDR, 2) != LUT_PLAYBACK_ORIG:
+            raise RuntimeError("恢复 0x866AE770 校验失败")
+        print("PROGRESS 1 1", flush=True)
+        return {"ok": True, "enabled": False, "mode": "stock", "playbackFix": False}
+
+    payloads = load_lut_payloads()
+    blob = base64.b64decode(payloads[mode]["base64"])
+    if len(blob) % 2:
+        blob += b"\x00"
+
+    # Safely restore stock prologue before overwriting code cave
+    if status.get("enabled"):
+        write_halfwords(svc, LUT_HOOK_ADDR, LUT_HOOK_ORIG)
+
+    total_hw = len(blob) // 2 + 4
+    done = 0
+    # Zero log header (32 bytes)
+    write_halfwords(svc, LUT_LOG_ADDR, b"\x00" * 32)
+    done += 1
+    print("PROGRESS %d %d" % (done, total_hw), flush=True)
+
+    # Write payload halfwords in chunks with progress
+    for off in range(0, len(blob), 2):
+        write_half(svc, LUT_PAYLOAD_ADDR + off, struct.unpack_from("<H", blob, off)[0])
+        done += 1
+        if done % 64 == 0 or off + 2 >= len(blob):
+            print("PROGRESS %d %d" % (done, total_hw), flush=True)
+
+    if read_bytes(svc, LUT_PAYLOAD_ADDR, len(blob)) != blob:
+        raise RuntimeError("LUT 引擎写入回读校验不一致")
+
+    write_halfwords(svc, LUT_HOOK_ADDR, LUT_HOOK_PATCH)
+    if read_bytes(svc, LUT_HOOK_ADDR, 4) != LUT_HOOK_PATCH:
+        raise RuntimeError("Hook 0x868243C0 回读校验不一致")
+    done += 1
+
+    target_play = LUT_PLAYBACK_PATCH if playback_fix else LUT_PLAYBACK_ORIG
+    write_halfwords(svc, LUT_PLAYBACK_ADDR, target_play)
+    if read_bytes(svc, LUT_PLAYBACK_ADDR, 2) != target_play:
+        raise RuntimeError("回放补丁 0x866AE770 回读校验不一致")
+    print("PROGRESS %d %d" % (total_hw, total_hw), flush=True)
+
+    return {
+        "ok": True,
+        "enabled": True,
+        "mode": mode,
+        "playbackFix": bool(playback_fix),
+        "payloadBytes": len(blob),
+    }
+
+
 def entry_problem(raw, idx):
     """Why a 32-byte sound-table entry does not look like entry idx (None if it does)."""
     entry_id, addr = struct.unpack_from("<II", raw, 0)
@@ -347,6 +484,7 @@ def cmd_status():
             "custom": SCRATCH_START - 0x80000000 <= addr < SCRATCH_END - 0x80000000,
             "body_version": "0x%04X" % ver,
             "unlock": inspect_unlock(svc),
+            "lut": inspect_lut(svc),
         }))
     except Exception as exc:
         print(json.dumps({"connected": True, "error": str(exc)}))
@@ -495,6 +633,14 @@ def cmd_set_unlock(enable):
         svc.close()
 
 
+def cmd_set_lut(enable, mode="fast", playback_fix=True):
+    svc = protocol().Service(settle=0.002)
+    try:
+        print(json.dumps(apply_lut(svc, enable, mode=mode, playback_fix=playback_fix)))
+    finally:
+        svc.close()
+
+
 def cmd_scan(start=SCRATCH_START, length=SCRATCH_END - SCRATCH_START):
     """Read-only: map which 1 KiB blocks after the scratch base are free."""
     if (start % 1024 or length <= 0 or length % 1024
@@ -517,7 +663,7 @@ def cmd_scan(start=SCRATCH_START, length=SCRATCH_END - SCRATCH_START):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["status", "dump", "apply", "apply-id", "apply-slot",
-                                    "restore", "restore-id", "scan", "set-unlock"])
+                                    "restore", "restore-id", "scan", "set-unlock", "set-lut"])
     ap.add_argument("args", nargs="*")
     a = ap.parse_args()
     if a.cmd == "status":
@@ -540,6 +686,13 @@ def main():
         if len(a.args) != 1 or a.args[0] not in ("0", "1"):
             raise ValueError("set-unlock requires 0 or 1")
         cmd_set_unlock(a.args[0] == "1")
+    elif a.cmd == "set-lut":
+        if len(a.args) < 1 or a.args[0] not in ("0", "1"):
+            raise ValueError("set-lut requires <0|1> [fast|lossless] [0|1]")
+        enable = a.args[0] == "1"
+        mode = a.args[1] if len(a.args) >= 2 else "fast"
+        playback_fix = (a.args[2] == "1") if len(a.args) >= 3 else True
+        cmd_set_lut(enable, mode=mode, playback_fix=playback_fix)
     else:
         cmd_restore_id(int(a.args[0]), a.args[1])
 

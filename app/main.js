@@ -141,6 +141,19 @@ ipcMain.handle('open-external', async (_event, url) => {
 ipcMain.handle('dump', () => deviceOperation('dump', () => runtime.inspect()));
 ipcMain.handle('scan-memory', () => deviceOperation('scan-memory', () => runtime.scanMemory()));
 ipcMain.handle('set-unlock', (_event, enable) => deviceOperation('set-unlock', () => runtime.setUnlock(enable === true)));
+ipcMain.handle('set-lut', (_event, options) => deviceOperation('set-lut', () => runtime.setLut(options || {})));
+ipcMain.handle('save-vlt', async (_event, { filename, content } = {}) => {
+  if (typeof content !== 'string' || !content.length) return { ok: false, error: 'VLT 内容为空。' };
+  const safeName = (typeof filename === 'string' && filename.trim() ? filename.trim() : 'CUSTOM.VLT');
+  const result = await dialog.showSaveDialog(win, {
+    title: '保存松下 .VLT 文件（请保存到 SD 卡根目录）',
+    defaultPath: safeName,
+    filters: [{ name: 'Panasonic VLT', extensions: ['VLT', 'vlt'] }],
+  });
+  if (result.canceled || !result.filePath) return { ok: true, canceled: true };
+  await fs.promises.writeFile(result.filePath, content, 'ascii');
+  return { ok: true, path: result.filePath };
+});
 ipcMain.handle('memory-map', (_event, version) => runtime.memoryMap(version));
 ipcMain.handle('export-memory', (_event, version) => deviceOperation('export-memory', async () => {
   const cached = runtime.memoryMap(version);

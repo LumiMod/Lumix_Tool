@@ -230,28 +230,48 @@ public final class CameraActivity extends Activity {
             return;
         }
 
-        if ("exportMemory".equals(method)) {
+        if ("exportMemory".equals(method) || "saveVlt".equals(method)) {
             executor.execute(() -> {
                 try {
                     JSONObject args = parsePayload(payloadJson);
-                    String version = args.optString("version", "");
-                    JSONObject map = storage.loadMemoryMap(version, mockMode);
-                    if (map == null) {
-                        JSONObject err = new JSONObject();
-                        err.put("ok", false);
-                        err.put("error", "请先执行一次内存扫描。");
-                        runOnUiThread(() -> web.resolve(requestId, err));
-                        return;
+                    String fileName;
+                    String mimeType;
+                    String content;
+                    if ("saveVlt".equals(method)) {
+                        content = args.optString("content", "");
+                        if (content.isEmpty()) {
+                            JSONObject err = new JSONObject();
+                            err.put("ok", false);
+                            err.put("error", "VLT 内容为空。");
+                            runOnUiThread(() -> web.resolve(requestId, err));
+                            return;
+                        }
+                        fileName = args.optString("filename", "CUSTOM.VLT");
+                        mimeType = "application/octet-stream";
+                    } else {
+                        String version = args.optString("version", "");
+                        JSONObject map = storage.loadMemoryMap(version, mockMode);
+                        if (map == null) {
+                            JSONObject err = new JSONObject();
+                            err.put("ok", false);
+                            err.put("error", "请先执行一次内存扫描。");
+                            runOnUiThread(() -> web.resolve(requestId, err));
+                            return;
+                        }
+                        content = map.toString(2);
+                        fileName = "LumixTool-memory-" + map.optString("bodyVersion", "s5") + ".json";
+                        mimeType = "application/json";
                     }
                     pendingExportRequestId = requestId;
-                    pendingExportJson = map.toString(2);
-                    String fileName = "LumixTool-memory-" + map.optString("bodyVersion", "s5") + ".json";
+                    pendingExportJson = content;
+                    final String finalMime = mimeType;
+                    final String finalName = fileName;
                     runOnUiThread(() -> {
                         try {
                             Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT)
                                     .addCategory(Intent.CATEGORY_OPENABLE)
-                                    .setType("application/json")
-                                    .putExtra(Intent.EXTRA_TITLE, fileName);
+                                    .setType(finalMime)
+                                    .putExtra(Intent.EXTRA_TITLE, finalName);
                             startActivityForResult(save, MobileView.SAVE_JSON);
                         } catch (Exception e) {
                             JSONObject err = new JSONObject();
@@ -319,7 +339,7 @@ public final class CameraActivity extends Activity {
             }
 
             boolean longRunning = "scanMemory".equals(method) || "applySlots".equals(method)
-                    || "restoreSlots".equals(method) || "setUnlock".equals(method);
+                    || "restoreSlots".equals(method) || "setUnlock".equals(method) || "setLut".equals(method);
             if (longRunning) setKeepScreenOn(true);
 
             JSONObject result;
@@ -340,6 +360,9 @@ public final class CameraActivity extends Activity {
                         break;
                     case "setUnlock":
                         result = rpcSetUnlock(args.getBoolean("unlock"));
+                        break;
+                    case "setLut":
+                        result = rpcSetLut(args);
                         break;
                     default:
                         result = new JSONObject();
@@ -786,6 +809,39 @@ public final class CameraActivity extends Activity {
                 emitProgress(p);
             } catch (Exception ignored) {}
         }));
+    }
+
+    private JSONObject loadLutPayloadsJson() throws Exception {
+        try (java.io.InputStream is = getAssets().open("lut_payloads.json")) {
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+            return new JSONObject(bos.toString(StandardCharsets.UTF_8.name()));
+        }
+    }
+
+    private JSONObject rpcSetLut(JSONObject args) throws Exception {
+        boolean enable = args.getBoolean("enable");
+        String mode = args.optString("mode", "fast");
+        boolean playbackFix = args.optBoolean("playbackFix", true);
+        byte[] payload = null;
+        if (enable) {
+            JSONObject meta = loadLutPayloadsJson();
+            String b64 = meta.getJSONObject(mode).getString("base64");
+            payload = Base64.decode(b64, Base64.DEFAULT);
+        }
+        final byte[] finalPayload = payload;
+        return withServiceTransport(true, transport -> LumixProtocol.applyLut(
+                transport, enable, mode, playbackFix, finalPayload, (done, total) -> {
+                    try {
+                        JSONObject p = new JSONObject();
+                        p.put("phase", enable ? "lut-enable" : "lut-restore");
+                        p.put("done", done);
+                        p.put("total", total);
+                        emitProgress(p);
+                    } catch (Exception ignored) {}
+                }));
     }
 
     @Override public void onBackPressed() {

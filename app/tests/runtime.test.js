@@ -59,7 +59,8 @@ test('mock defaults to a connected camera and exposes every connection scenario 
   runtime.run = () => { throw new Error('mock must not spawn Python'); };
   assert.deepEqual(await runtime.status(), { connected: true, model: 'DC-S5', body_version: '0x0290', custom: false, verified: true, table_problem: null,
     unlock: { totalAnchors: 13, totalPatches: 19, verifiedAnchors: 13, supported: true, firmware: 'MC801 2.9',
-      unlocked: false, fullyUnlocked: false, stock: true, unlockedWords: 2 } });
+      unlocked: false, fullyUnlocked: false, stock: true, unlockedWords: 2 },
+    lut: { supported: true, firmware: 'MC801 2.9', enabled: false, mode: 'stock', playbackFix: false, viewAssistMonitor: 1, activeLutId: 1 } });
   assert.equal((await runtime.environment()).python, 'Mock · 无需 Python');
   runtime.configureMock({ scenario: 'disconnected' });
   assert.deepEqual(await runtime.status(), { connected: false });

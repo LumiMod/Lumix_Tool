@@ -23,19 +23,19 @@ export default function MobileButtonGuide() {
     { label: t('guide.keyAfon'), x: '77.04%', y: '31.82%' },
   ];
   const frames = [
-    { title: t('guide.f0.t'), detail: t('guide.f0.d'), duration: 1400 },
-    { title: t('guide.f1.t'), detail: t('guide.f1.d'), duration: 1900 },
-    { title: t('guide.f2.t'), detail: t('guide.f2.d'), duration: 2300 },
-    { title: t('guide.f3.t'), detail: t('guide.f3.d') },
+    { title: t('guide.f0.t'), detail: t('guide.f0.d'), duration: 1500 },
+    { title: t('guide.f1.t'), detail: t('guide.f1.d'), duration: 2000 },
+    { title: t('guide.f2.t'), detail: t('guide.f2.d'), duration: 2400 },
+    { title: t('guide.f3.t'), detail: t('guide.f3.d'), duration: 2400 },
   ];
 
   const [frame, setFrame] = useState(0);
   const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   useEffect(() => {
-    if (reducedMotion || frame === frames.length - 1) return;
-    const timer = setTimeout(() => setFrame(frame + 1), frames[frame].duration);
+    if (reducedMotion) return;
+    const timer = setTimeout(() => setFrame(prev => (prev + 1) % frames.length), frames[frame].duration);
     return () => clearTimeout(timer);
-  }, [frame, reducedMotion]);
+  }, [frame, reducedMotion, frames.length]);
 
   return <div className="white-card button-demo" data-frame={frame} data-hold={frame === 1 || frame === 2}>
     <div className="guide-stage">

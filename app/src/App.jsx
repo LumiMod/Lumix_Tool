@@ -38,6 +38,7 @@ export default function App() {
 }
 
 const TOOL_I18N = {
+  'lut-direct': { title: 'nav.lut', desc: 'nav.lutDesc', scope: 'nav.lutScope' },
   'focus-sound': { title: 'nav.sounds', desc: 'nav.soundsDesc', scope: 'nav.soundsScope' },
   memory: { title: 'nav.memory', desc: 'nav.memoryDesc', scope: 'nav.memoryScope' },
   'open-gate': { title: 'nav.openGate', desc: 'nav.openGateDesc', scope: 'nav.openGateScope' },

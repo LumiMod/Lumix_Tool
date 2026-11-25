@@ -52,7 +52,11 @@ class Runtime {
   constructor({ configPath, legacyConfigPath, scriptPath, bundledPython = null, mock = false, onProgress = () => {}, platform = process.platform }) {
     Object.assign(this, { configPath, legacyConfigPath, scriptPath, bundledPython, mock, onProgress, platform });
     this.python = null;
-    this.mockState = { scenario: 'connected', failNext: false, custom: false, unlock: false, driverScenario: 'ok', driverResult: 'success' };
+    this.mockState = {
+      scenario: 'connected', failNext: false, custom: false, unlock: false,
+      lut: { enabled: false, mode: 'stock', playbackFix: false },
+      driverScenario: 'ok', driverResult: 'success',
+    };
     this.driver = new DriverManager({ platform, mock, mockState: this.mockState });
     this.mockEntries = mockTable.map(entry => ({ ...entry }));
     this.soundsPath = path.join(path.dirname(configPath), mock ? 'sounds-mock.json' : 'sounds.json');
@@ -229,6 +233,36 @@ class Runtime {
     finally { this.progressPhase = null; }
   }
 
+  async setLut({ enable, mode = 'fast', playbackFix = true } = {}) {
+    if (typeof enable !== 'boolean') return { ok: false, error: 'LUT 参数无效。' };
+    if (!['fast', 'lossless'].includes(mode)) return { ok: false, error: 'LUT 模式无效。' };
+    if (this.mock) {
+      if (this.mockState.scenario === 'unverified') {
+        return { ok: false, supported: false, error: '固件特征不匹配，仅支持初代 DC-S5 (MC801) 官方固件 2.9' };
+      }
+      if (!['connected', 'region-not-free'].includes(this.mockState.scenario)) {
+        return { ok: false, error: '模拟设备未就绪，请先连接相机。' };
+      }
+      this.progressPhase = enable ? 'lut-enable' : 'lut-restore';
+      try {
+        const steps = enable ? 16 : 4;
+        for (let step = 1; step <= steps; step++) {
+          await new Promise(resolve => setTimeout(resolve, 60));
+          this.emitProgress({ done: step, total: steps });
+        }
+        this.mockState.lut = enable
+          ? { enabled: true, mode, playbackFix: !!playbackFix }
+          : { enabled: false, mode: 'stock', playbackFix: false };
+        return { ok: true, ...this.mockState.lut };
+      } finally { this.progressPhase = null; }
+    }
+    if (this.platform !== 'win32') return { ok: false, error: '实机写入需要 Windows WinUSB 环境。' };
+    this.progressPhase = enable ? 'lut-enable' : 'lut-restore';
+    try {
+      return await this.run(['set-lut', enable ? '1' : '0', mode, playbackFix ? '1' : '0']);
+    } finally { this.progressPhase = null; }
+  }
+
   renameSound({ version, index, label } = {}) {
     if (typeof version !== 'string' || !validIndex(index) || typeof label !== 'string' || label.length > 80) return { ok: false, error: '音效名称无效（最多 80 字）。' };
     const sounds = this.loadSounds();
@@ -326,8 +360,19 @@ class Runtime {
         unlockedWords: scenario === 'unverified' ? 0 : (unlock ? 19 : 2),
         ...(scenario === 'unverified' ? { error: '固件特征不匹配，仅支持初代 DC-S5 (MC801) 官方固件 2.9' } : {}),
       };
-      if (scenario === 'unverified') return { connected: true, model: 'DC-S5', body_version: '0x0280', custom, verified: false, table_problem: null, unlock: unlockInfo };
-      return { connected: true, model: 'DC-S5', body_version: '0x0290', custom, verified: true, table_problem: null, unlock: unlockInfo };
+      const lutState = this.mockState.lut || { enabled: false, mode: 'stock', playbackFix: false };
+      const lutInfo = {
+        supported: scenario !== 'unverified',
+        firmware: 'MC801 2.9',
+        enabled: scenario !== 'unverified' && !!lutState.enabled,
+        mode: scenario !== 'unverified' && lutState.enabled ? lutState.mode : 'stock',
+        playbackFix: scenario !== 'unverified' && !!lutState.playbackFix,
+        viewAssistMonitor: 1,
+        activeLutId: 1,
+        ...(scenario === 'unverified' ? { error: '固件特征不匹配，仅支持初代 DC-S5 (MC801) 官方固件 2.9' } : {}),
+      };
+      if (scenario === 'unverified') return { connected: true, model: 'DC-S5', body_version: '0x0280', custom, verified: false, table_problem: null, unlock: unlockInfo, lut: lutInfo };
+      return { connected: true, model: 'DC-S5', body_version: '0x0290', custom, verified: true, table_problem: null, unlock: unlockInfo, lut: lutInfo };
     }
     if (!await this.findPython()) return { connected: false, pythonMissing: true, error: '未找到 Python 3，请在设置中指定路径。' };
     // The existing backend imports winreg/WinUSB. Do not run it on macOS/Linux.

@@ -87,6 +87,15 @@ public final class MockCameraTransport implements LumixProtocol.Transport {
         for (long[] patch : LumixProtocol.UNLOCK_PATCHES) {
             halfwords.put(patch[0], (int) patch[2]); // stock by default
         }
+        // Real-Time LUT anchors (stock MC801 FW 2.9)
+        halfwords.put(LumixProtocol.LUT_HOOK_ADDR, 0xE92D);
+        halfwords.put(LumixProtocol.LUT_HOOK_ADDR + 2, 0x43F0);
+        halfwords.put(LumixProtocol.LUT_HOOK_ADDR + 4, 0x4604);
+        halfwords.put(LumixProtocol.LUT_HOOK_ADDR + 6, 0x6800);
+        halfwords.put(LumixProtocol.LUT_PLAYBACK_PREV_ADDR, 0x4208);
+        halfwords.put(LumixProtocol.LUT_PLAYBACK_ADDR, 0xD013);
+        halfwords.put(LumixProtocol.LUT_VA_MON_ADDR, 1);
+        halfwords.put(LumixProtocol.LUT_VA_ID_ADDR, 1);
     }
 
     public synchronized void setBodyVersion(int version) {

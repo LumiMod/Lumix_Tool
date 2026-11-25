@@ -93,6 +93,21 @@ public final class LumixProtocol {
             {0x868261B6L, 0x2000L, 0x4628L},
     };
 
+    // Real-Time JPEG Direct-Output 3D LUT (RAM-only, MC801 FW 2.9 verified)
+    public static final long LUT_PAYLOAD_ADDR = 0x86370000L;
+    public static final long LUT_HOOK_ADDR = 0x868243C0L;
+    public static final byte[] LUT_HOOK_ORIG = new byte[]{(byte) 0x2D, (byte) 0xE9, (byte) 0xF0, (byte) 0x43};
+    public static final byte[] LUT_HOOK_PATCH = new byte[]{(byte) 0x4B, (byte) 0xF7, (byte) 0x1E, (byte) 0xB6};
+    public static final byte[] LUT_HOOK_NEXT_ANCHOR = new byte[]{(byte) 0x04, (byte) 0x46, (byte) 0x00, (byte) 0x68};
+    public static final long LUT_PLAYBACK_PREV_ADDR = 0x866AE76EL;
+    public static final byte[] LUT_PLAYBACK_PREV_ANCHOR = new byte[]{(byte) 0x08, (byte) 0x42};
+    public static final long LUT_PLAYBACK_ADDR = 0x866AE770L;
+    public static final byte[] LUT_PLAYBACK_ORIG = new byte[]{(byte) 0x13, (byte) 0xD0};
+    public static final byte[] LUT_PLAYBACK_PATCH = new byte[]{(byte) 0x13, (byte) 0xE0};
+    public static final long LUT_LOG_ADDR = 0x8F300000L;
+    public static final long LUT_VA_MON_ADDR = 0x88BDC310L;
+    public static final long LUT_VA_ID_ADDR = 0x88BDC330L;
+
     public interface Transport {
         int readHalf(long addr) throws Exception;
         void writeHalf(long addr, int value) throws Exception;
@@ -436,6 +451,143 @@ public final class LumixProtocol {
         out.put("custom", custom);
         out.put("entries", entries);
         out.put("unlock", inspectUnlock(t));
+        out.put("lut", inspectLut(t, null, null));
+        return out;
+    }
+
+    public static JSONObject inspectLut(Transport t, byte[] fastBin, byte[] losslessBin) throws Exception {
+        JSONObject info = new JSONObject();
+        info.put("supported", false);
+        info.put("enabled", false);
+        info.put("mode", "stock");
+        info.put("playbackFix", false);
+        try {
+            int ver = readBodyVersion(t);
+            if (ver != VERIFIED_BODY_VERSION) {
+                throw new UnsupportedFirmwareException("仅支持初代 DC-S5 (MC801) 固件 2.9");
+            }
+            byte[] hookBytes = readBytes(t, LUT_HOOK_ADDR, 8);
+            byte[] playBytes = readBytes(t, LUT_PLAYBACK_PREV_ADDR, 4);
+            byte[] hookInsn = Arrays.copyOfRange(hookBytes, 0, 4);
+            byte[] nextInsn = Arrays.copyOfRange(hookBytes, 4, 8);
+            byte[] prevPlay = Arrays.copyOfRange(playBytes, 0, 2);
+            byte[] playInsn = Arrays.copyOfRange(playBytes, 2, 4);
+
+            if (!Arrays.equals(nextInsn, LUT_HOOK_NEXT_ANCHOR) || !Arrays.equals(prevPlay, LUT_PLAYBACK_PREV_ANCHOR)) {
+                throw new UnsupportedFirmwareException("固件 LUT 特征锚点不匹配，已拒绝写入");
+            }
+            if (!Arrays.equals(hookInsn, LUT_HOOK_ORIG) && !Arrays.equals(hookInsn, LUT_HOOK_PATCH)) {
+                throw new UnsupportedFirmwareException("0x868243C0 指令未知: " + toHex(hookInsn));
+            }
+            if (!Arrays.equals(playInsn, LUT_PLAYBACK_ORIG) && !Arrays.equals(playInsn, LUT_PLAYBACK_PATCH)) {
+                throw new UnsupportedFirmwareException("0x866AE770 指令未知: " + toHex(playInsn));
+            }
+            boolean enabled = Arrays.equals(hookInsn, LUT_HOOK_PATCH);
+            boolean playbackFix = Arrays.equals(playInsn, LUT_PLAYBACK_PATCH);
+            String mode = "stock";
+            if (enabled) {
+                mode = "fast";
+                if (fastBin != null && losslessBin != null) {
+                    int checkLen = Math.min(64, Math.min(fastBin.length, losslessBin.length));
+                    byte[] curHead = readBytes(t, LUT_PAYLOAD_ADDR, checkLen);
+                    if (Arrays.equals(curHead, Arrays.copyOf(fastBin, checkLen))) {
+                        mode = "fast";
+                    } else if (Arrays.equals(curHead, Arrays.copyOf(losslessBin, checkLen))) {
+                        mode = "lossless";
+                    } else {
+                        mode = "custom";
+                    }
+                }
+            }
+            long vaMon = u32LE(readBytes(t, LUT_VA_MON_ADDR, 4), 0);
+            long vaId = u32LE(readBytes(t, LUT_VA_ID_ADDR, 4), 0);
+            info.put("supported", true);
+            info.put("firmware", "MC801 2.9");
+            info.put("enabled", enabled);
+            info.put("mode", mode);
+            info.put("playbackFix", playbackFix);
+            info.put("viewAssistMonitor", (int) vaMon);
+            info.put("activeLutId", vaId < 5L ? (int) vaId : 0);
+        } catch (Exception err) {
+            info.put("error", err.getMessage());
+        }
+        return info;
+    }
+
+    public static JSONObject applyLut(Transport t, boolean enable, String mode, boolean playbackFix,
+                                      byte[] payloadBytes, ProgressListener listener) throws Exception {
+        if (!"fast".equals(mode) && !"lossless".equals(mode)) {
+            throw new IllegalArgumentException("mode must be fast or lossless");
+        }
+        JSONObject status = inspectLut(t, null, null);
+        if (!status.optBoolean("supported", false)) {
+            throw new UnsupportedFirmwareException(status.optString("error", "当前固件不支持 LUT 直出"));
+        }
+
+        if (!enable) {
+            writeHalfwords(t, LUT_HOOK_ADDR, LUT_HOOK_ORIG);
+            writeHalfwords(t, LUT_PLAYBACK_ADDR, LUT_PLAYBACK_ORIG);
+            if (!Arrays.equals(readBytes(t, LUT_HOOK_ADDR, 4), LUT_HOOK_ORIG)) {
+                throw new Exception("恢复 0x868243C0 校验失败");
+            }
+            if (!Arrays.equals(readBytes(t, LUT_PLAYBACK_ADDR, 2), LUT_PLAYBACK_ORIG)) {
+                throw new Exception("恢复 0x866AE770 校验失败");
+            }
+            if (listener != null) listener.onProgress(1, 1);
+            JSONObject out = new JSONObject();
+            out.put("ok", true);
+            out.put("enabled", false);
+            out.put("mode", "stock");
+            out.put("playbackFix", false);
+            return out;
+        }
+
+        if (payloadBytes == null || payloadBytes.length < 64 || (payloadBytes.length & 1) != 0) {
+            throw new IllegalArgumentException("LUT 引擎载荷无效");
+        }
+
+        if (status.optBoolean("enabled", false)) {
+            writeHalfwords(t, LUT_HOOK_ADDR, LUT_HOOK_ORIG);
+        }
+
+        int totalHw = payloadBytes.length / 2 + 4;
+        int done = 0;
+        writeHalfwords(t, LUT_LOG_ADDR, new byte[32]);
+        done++;
+        if (listener != null) listener.onProgress(done, totalHw);
+
+        for (int off = 0; off < payloadBytes.length; off += 2) {
+            int val = (payloadBytes[off] & 0xFF) | ((payloadBytes[off + 1] & 0xFF) << 8);
+            t.writeHalf(LUT_PAYLOAD_ADDR + off, val);
+            done++;
+            if (listener != null && (done % 64 == 0 || off + 2 >= payloadBytes.length)) {
+                listener.onProgress(done, totalHw);
+            }
+        }
+
+        if (!Arrays.equals(readBytes(t, LUT_PAYLOAD_ADDR, payloadBytes.length), payloadBytes)) {
+            throw new Exception("LUT 引擎写入回读校验不一致");
+        }
+
+        writeHalfwords(t, LUT_HOOK_ADDR, LUT_HOOK_PATCH);
+        if (!Arrays.equals(readBytes(t, LUT_HOOK_ADDR, 4), LUT_HOOK_PATCH)) {
+            throw new Exception("Hook 0x868243C0 回读校验不一致");
+        }
+        done++;
+
+        byte[] targetPlay = playbackFix ? LUT_PLAYBACK_PATCH : LUT_PLAYBACK_ORIG;
+        writeHalfwords(t, LUT_PLAYBACK_ADDR, targetPlay);
+        if (!Arrays.equals(readBytes(t, LUT_PLAYBACK_ADDR, 2), targetPlay)) {
+            throw new Exception("回放补丁 0x866AE770 回读校验不一致");
+        }
+        if (listener != null) listener.onProgress(totalHw, totalHw);
+
+        JSONObject out = new JSONObject();
+        out.put("ok", true);
+        out.put("enabled", true);
+        out.put("mode", mode);
+        out.put("playbackFix", playbackFix);
+        out.put("payloadBytes", payloadBytes.length);
         return out;
     }
 

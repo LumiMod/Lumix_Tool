@@ -16,22 +16,19 @@ const switches = [
 ];
 
 export default function CameraButtonGuide({ active, children }) {
-  const [stage, setStage] = useState(-1);
-  const [playing, setPlaying] = useState(false);
+  const [stage, setStage] = useState(0);
+  const [playing, setPlaying] = useState(true);
   useEffect(() => {
     if (!active || !playing) return;
     const timer = window.setTimeout(() => {
-      if (stage === instructions.length - 1) setPlaying(false);
-      else setStage(stage + 1);
-    }, 2600);
+      setStage(prev => (prev + 1) % instructions.length);
+    }, 2400);
     return () => window.clearTimeout(timer);
   }, [active, playing, stage]);
 
-  const finished = stage === instructions.length - 1 && !playing;
-  const label = playing ? '暂停演示' : finished ? '重播演示' : stage < 0 ? '播放按键演示' : '继续演示';
+  const label = playing ? '暂停演示' : '继续演示';
   function togglePlayback() {
-    if (!playing && (stage < 0 || finished)) setStage(0);
-    setPlaying(!playing);
+    setPlaying(p => !p);
   }
 
   return <section className="camera-instructions" aria-labelledby="camera-gesture-heading">
@@ -56,7 +53,7 @@ export default function CameraButtonGuide({ active, children }) {
       <figcaption>
         <span>{stage < 0 ? 'DC-S5 机背' : '演示 · 电源 ' + (stage === 2 ? 'ON' : 'OFF')}</span>
         <button className="camera-instructions__play" type="button" onClick={togglePlayback}>
-          {playing ? <PauseOutlined /> : finished ? <RedoOutlined /> : <PlayCircleOutlined />}{label}
+          {playing ? <PauseOutlined /> : <PlayCircleOutlined />}{label}
         </button>
       </figcaption>
       <span className="camera-instructions__sr" role="status">{stage >= 0 && instructions[stage].title}</span>

@@ -1,9 +1,18 @@
-import { DatabaseOutlined, SoundOutlined, VideoCameraOutlined } from '@ant-design/icons';
+import { BgColorsOutlined, DatabaseOutlined, SoundOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import OpenGate from './OpenGate';
+import LutDirect from './lut/LutDirect';
 import Sounds from './sounds/Sounds';
 import Memory from './memory/Memory';
 
 export const tools = [
+  {
+    id: 'lut-direct',
+    title: '实时 LUT 直出',
+    icon: <BgColorsOutlined />,
+    description: '纯 RAM 启用 DC-S5 静态照片 JPEG 实时 3D LUT 直出，原生联动 V-Log 查看助手。',
+    scope: '写入 RAM · DC-S5',
+    component: LutDirect,
+  },
   {
     id: 'focus-sound',
     title: '音效替换',

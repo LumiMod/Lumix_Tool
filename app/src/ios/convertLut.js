@@ -9,11 +9,16 @@ export async function convertIosFile(text, name) {
     return convertFileToVlt(text, name);
   }
 
+  let startupTimer;
+  let result;
   try {
-    const result = await new Promise((resolve, reject) => {
+    result = await new Promise((resolve, reject) => {
       let started = false;
+      // A suspended WebView may create the worker without ever running its script.
+      startupTimer = setTimeout(() => resolve(null), 5000);
       worker.onmessage = ({ data }) => {
         if (data === 'ready') {
+          clearTimeout(startupTimer);
           try {
             worker.postMessage({ text, name });
             started = true;
@@ -33,9 +38,9 @@ export async function convertIosFile(text, name) {
       };
       worker.onmessageerror = () => reject(new Error('Unreadable worker message'));
     });
-    // Some WebViews expose Worker but cannot start its script. Use the same converter locally.
-    return result ?? convertFileToVlt(text, name);
   } finally {
+    clearTimeout(startupTimer);
     worker.terminate();
   }
+  return result ?? convertFileToVlt(text, name);
 }

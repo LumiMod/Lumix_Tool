@@ -259,7 +259,7 @@ export const MESSAGES = {
     'lut.transferIntro': '导入 CUBE 或 VLT，写入机身或导出到 SD 卡。机身烧录尚未经真机验证。',
     'lut.pickLut': '选择 LUT',
     'lut.guideTitle': '使用教程',
-    'lut.guideIntro': '对照 S5 实拍菜单，完成 LUT 选择、监视器预览和照片拍摄设置。',
+    'lut.guideIntro': '对照 S5 菜单示意图，选择 LUT、开启监视器预览并设置照片格调。',
     'lut.openGuide': '查看步骤',
   },
   en: {
@@ -491,7 +491,7 @@ export const MESSAGES = {
     'lut.transferIntro': 'Import a CUBE or VLT and save it to an SD card or write it to the camera. Camera writing is untested on hardware.',
     'lut.pickLut': 'Choose a LUT',
     'lut.guideTitle': 'Camera guide',
-    'lut.guideIntro': 'Follow real S5 menu photos to select a LUT, preview it on the monitor, and set up your shot.',
+    'lut.guideIntro': 'Follow the illustrated S5 menus to select a LUT, preview it on the monitor, and set the Photo Style.',
     'lut.openGuide': 'View steps',
   },
   ja: {
@@ -723,7 +723,7 @@ export const MESSAGES = {
     'lut.transferIntro': 'CUBE・VLT を読み込み、SD カード用に書き出すかカメラに書き込みます。カメラへの書き込みは実機未検証です。',
     'lut.pickLut': 'LUT を選ぶ',
     'lut.guideTitle': '使い方ガイド',
-    'lut.guideIntro': 'S5 の実機画面を見ながら、LUT の選択、モニター表示、写真撮影を設定します。',
+    'lut.guideIntro': 'S5 のメニューをもとにした図解で、LUT の選択、モニター表示、フォトスタイルの設定を確認できます。',
     'lut.openGuide': '手順を見る',
   },
 };

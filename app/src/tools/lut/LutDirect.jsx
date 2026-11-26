@@ -6,7 +6,6 @@ import {
 } from '@ant-design/icons';
 import { useI18n } from '../../i18n';
 import cameraPhoto from '../../assets/camera/dc-s5-front.webp';
-import menuPhoto from './guide-photos/menu.jpg';
 import LutGuide from './LutGuide';
 import LutTransfer from './LutTransfer';
 import './LutDirect.css';
@@ -206,7 +205,13 @@ export default function LutDirect({
             <p>{t('lut.transferIntro')}</p><span className="lut-entry-link">{t('lut.pickLut')}<ArrowRightOutlined /></span></div>
         </button>
         <button type="button" id="lut-guide-entry" className="lut-entry" disabled={isBlocked} onClick={e => openGuide('card', e.currentTarget)}>
-          <div className="lut-entry-art is-guide" aria-hidden="true"><img src={menuPhoto} alt="" /></div>
+          <div className="lut-entry-art is-guide" aria-hidden="true">
+            <div className="lut-menu-thumb">
+              <span className="lut-menu-thumb__heading">V-Log</span>
+              <span className="lut-menu-thumb__selection">LUT<ArrowRightOutlined /></span>
+              <i /><i />
+            </div>
+          </div>
           <div className="lut-entry-body"><div className="lut-entry-title"><h3>{t('lut.guideTitle')}</h3></div>
             <p>{t('lut.guideIntro')}</p><span className="lut-entry-link">{t('lut.openGuide')}<ArrowRightOutlined /></span></div>
         </button>

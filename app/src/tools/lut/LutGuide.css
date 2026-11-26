@@ -110,22 +110,8 @@
   background: var(--guide-surface);
 }
 .s5-guide__figure { margin: 0; }
-.s5-guide__screen {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1.6;
-  overflow: hidden;
-  background: #15171b;
-}
-.s5-guide__screen img {
-  display: block;
-  position: absolute;
-  inset: 0 auto auto 0;
-  max-width: none;
-  height: auto;
-}
 .s5-guide__caption { padding: 16px 20px; }
-.s5-guide__counter { font-weight: 600; letter-spacing: .06em; }
+.s5-guide__counter { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5em; font-weight: 600; }
 .s5-guide__caption h3 {
   margin: 3px 0 5px;
   font-size: clamp(18px, 3cqw, 22px);

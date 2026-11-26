@@ -1,0 +1,153 @@
+.s5-screen {
+  --lcd-paper: #1b2031;
+  --lcd-type: #fafbff;
+  --lcd-head: #a9c9ff;
+  --lcd-tab: #a59aff;
+  --lcd-line: #7c73d8;
+  --lcd-cursor: #ffda49;
+  container-type: inline-size;
+  color: var(--lcd-type);
+  background: var(--lcd-paper);
+  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+.s5-screen__columns,
+.s5-screen__list,
+.s5-screen__confirm,
+.s5-screen__quick {
+  box-sizing: border-box;
+  min-height: clamp(202px, 47cqw, 318px);
+  padding: clamp(10px, 2.8cqw, 22px);
+  font-size: clamp(14px, 3.1cqw, 21px);
+  line-height: 1.3;
+}
+.s5-screen__columns {
+  display: grid;
+  grid-template-columns: 1.55em 1.55em minmax(0, 1fr);
+  padding-inline-start: .35em;
+  gap: .18em;
+}
+.s5-screen__rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: .1em;
+  border-inline-end: 1px solid var(--lcd-line);
+}
+.s5-screen__rail > span {
+  display: grid;
+  place-items: center;
+  min-height: 1.6em;
+  color: #e4e7f0;
+}
+.s5-screen__rail svg { display: block; width: 1.1em; height: 1.1em; }
+.s5-screen__rail > .is-active {
+  border-radius: 3px 0 0 3px;
+  background: #363254;
+  color: var(--lcd-tab);
+  box-shadow: inset 2px 0 var(--lcd-tab);
+}
+.s5-screen__main,
+.s5-screen__list { min-width: 0; }
+.s5-screen__list { display: flex; flex-direction: column; }
+.s5-screen__heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .45em;
+  padding: .18em .42em .36em;
+  border-bottom: 2px solid var(--lcd-line);
+  color: var(--lcd-head);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.s5-screen__battery {
+  position: relative;
+  box-sizing: border-box;
+  width: .9em;
+  height: .48em;
+  flex: none;
+  margin-inline-end: 2px;
+  border: 1px solid #cdd4e5;
+  background: linear-gradient(to right, #e8edfb 76%, transparent 76%);
+}
+.s5-screen__battery::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: -3px;
+  top: 20%;
+  width: 2px;
+  height: 60%;
+  background: #cdd4e5;
+}
+.s5-screen__rows { margin-top: .18em; }
+.s5-screen__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .45em;
+  padding: .3em .5em;
+  background: #2c3144;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.s5-screen__row:nth-child(even) { background: #232838; }
+.s5-screen__row.is-selected,
+.s5-screen__choices .is-selected,
+.s5-screen__tiles .is-selected {
+  background: var(--lcd-cursor);
+  color: #201e13;
+}
+.s5-screen__value {
+  align-self: center;
+  flex: none;
+  font-size: .87em;
+  font-variant-numeric: tabular-nums;
+}
+.s5-screen__back {
+  align-self: flex-start;
+  margin: auto 0 0;
+  padding: 0 .28em;
+  border: 1px solid #adb5c9;
+  border-radius: 3px;
+  color: #e4e7ef;
+  font-size: .9em;
+}
+.s5-screen__list .s5-screen__rows { margin-bottom: .6em; }
+.s5-screen__confirm { display: grid; place-items: center; }
+.s5-screen__confirm > div {
+  box-sizing: border-box;
+  width: min(94%, 22em);
+  padding: 1em;
+  border: 1.5px solid #e4e7ef;
+  background: #292e41;
+  line-height: 1.5;
+  text-align: center;
+}
+.s5-screen__choices { display: flex; justify-content: center; gap: .8em; margin-top: 1.1em; }
+.s5-screen__choices span { flex: 1; padding: .24em; background: #474c60; font-weight: 600; }
+.s5-screen__choices .is-selected { background: var(--lcd-cursor); }
+.s5-screen__quick { display: flex; flex-direction: column; gap: .45em; }
+.s5-screen__quick-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5em; flex: 1; }
+.s5-screen__finder { min-width: 0; display: grid; grid-template-rows: 1fr auto; background: #101522; }
+.s5-screen__finder strong { padding: .35em; background: #151a27; text-align: center; font-size: .95em; }
+.s5-screen__target {
+  place-self: center;
+  width: 2.1em;
+  height: 1.2em;
+  border: 1px dashed #738197;
+}
+.s5-screen__tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(4, 1fr); gap: 2px; }
+.s5-screen__tiles b { display: grid; place-items: center; align-content: center; background: #343a4c; font-size: max(12px, .78em); text-align: center; }
+.s5-screen__tiles svg { display: block; width: 1.35em; height: 1.35em; }
+.s5-screen__tiles .is-selected svg { width: 1em; height: 1em; }
+.s5-screen__styles {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: .35em;
+  padding: .38em;
+  border: 1px solid #abb2c3;
+  font-size: .9em;
+  font-weight: 600;
+}
+.s5-screen__styles strong { color: var(--lcd-cursor); }

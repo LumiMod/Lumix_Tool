@@ -134,7 +134,7 @@ public final class CameraActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (request == MobileView.PICK_AUDIO) {
+        if (request == MobileView.PICK_FILE) {
             web.finishPicker(result, data);
         } else if (request == MobileView.SAVE_JSON) {
             finishExportJson(result, data);

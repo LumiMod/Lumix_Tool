@@ -1,317 +1,183 @@
-/* Clean, visual-first LUT Direct UI (Desktop + Mobile) */
-.lut-hero {
-  position: relative;
-  border-radius: 14px;
+.lut-studio, .lut-dialog {
+  --lut-surface: var(--panel, var(--card, #fff));
+  --lut-inset: var(--rail, var(--fill, #f1f5f9));
+  --lut-border: var(--stroke, var(--line, #dce0e4));
+  --lut-ink: var(--ink, #202428);
+  --lut-muted: var(--subtle, var(--muted, #58616a));
+  --lut-accent: var(--accent, var(--blue, #005fb8));
+  --lut-accent-soft: var(--tint, var(--blue-soft, #eaf3fc));
+  --lut-on-button: white;
+  --lut-success: #187044;
+  --lut-success-soft: #edf7f1;
+  --lut-warning: #8a520d;
+  --lut-warning-soft: #fff4df;
+  --lut-danger: #a52730;
+  --lut-danger-soft: #fff0f1;
+  color: var(--lut-ink);
+}
+.lut-studio { container-type: inline-size; }
+.lut-studio *, .lut-dialog * { box-sizing: border-box; }
+.lut-studio button, .lut-dialog button { font: inherit; }
+.lut-studio button:focus-visible, .lut-dialog button:focus-visible, .lut-settings input:focus-visible {
+  outline: 3px solid var(--lut-accent);
+  outline-offset: 3px;
+}
+.lut-activation {
   overflow: hidden;
-  height: 112px;
-  background: linear-gradient(125deg, #273444 0%, #c87d42 48%, #165e72 100%);
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding: 12px 14px;
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--lut-border);
+  border-radius: 16px;
+  background: var(--lut-surface);
 }
-
-.lut-hero__wipe {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(125deg, #273444 0%, #c87d42 48%, #165e72 100%);
-  filter: saturate(0.18) contrast(0.72) brightness(1.06);
-  clip-path: inset(0 50% 0 0);
-  animation: lutWipe 5s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.lut-hero__divider {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 2px;
-  background: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
-  animation: lutDivider 5s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes lutWipe {
-  0%, 15% { clip-path: inset(0 72% 0 0); }
-  50%, 65% { clip-path: inset(0 28% 0 0); }
-  100% { clip-path: inset(0 72% 0 0); }
-}
-
-@keyframes lutDivider {
-  0%, 15% { left: 28%; }
-  50%, 65% { left: 72%; }
-  100% { left: 28%; }
-}
-
-.lut-hero__label {
+.lut-activation__hero {
   position: relative;
-  z-index: 2;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(4px);
-}
-
-.lut-hero__label.is-lut {
-  background: rgba(232, 156, 20, 0.92);
-  color: #111;
-}
-
-.lut-hero__status {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  z-index: 2;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.lut-hero__status.is-on {
-  background: rgba(29, 185, 84, 0.92);
-  color: #fff;
-}
-
-/* Mode selector pills */
-.lut-modes {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.lut-mode-btn {
-  appearance: none;
-  border: 1.5px solid rgba(128, 128, 128, 0.25);
-  background: transparent;
-  color: inherit;
-  border-radius: 12px;
-  padding: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-align: left;
-  transition: all 0.2s ease;
-}
-
-.lut-mode-btn.is-selected {
-  border-color: #0067b8;
-  background: rgba(0, 103, 184, 0.1);
-}
-
-.lut-mode-btn__ico {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: rgba(128, 128, 128, 0.14);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.lut-mode-btn.is-selected .lut-mode-btn__ico {
-  background: #0067b8;
-  color: #fff;
-}
-
-.lut-mode-btn__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.lut-mode-btn__copy strong {
-  font-size: 13px;
-}
-
-.lut-mode-btn__copy span {
-  font-size: 11px;
-  opacity: 0.72;
-}
-
-/* Clean toggle row */
-.lut-toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(128, 128, 128, 0.07);
-  font-size: 13px;
-}
-
-.lut-toggle-row__left {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-}
-
-.lut-toggle-row input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  accent-color: #0067b8;
-}
-
-/* Level-3 Entry Tiles */
-.lut-subgrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.lut-subtile {
-  appearance: none;
-  border: 1px solid rgba(128, 128, 128, 0.24);
-  background: transparent;
-  color: inherit;
-  border-radius: 12px;
-  padding: 13px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  text-align: left;
-  transition: all 0.2s ease;
-}
-
-.lut-subtile:hover {
-  border-color: #0067b8;
-  background: rgba(0, 103, 184, 0.06);
-}
-
-.lut-subtile__left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.lut-subtile__ico {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: rgba(232, 156, 20, 0.14);
-  color: #e89c14;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 17px;
-  flex-shrink: 0;
-}
-
-.lut-subtile__ico.is-blue {
-  background: rgba(0, 103, 184, 0.14);
-  color: #0067b8;
-}
-
-.lut-subtile__text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.lut-subtile__text strong {
-  font-size: 13px;
-}
-
-.lut-subtile__text span {
-  font-size: 11px;
-  opacity: 0.72;
-}
-
-/* Sub-page header */
-.lut-subhead {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.lut-subhead__back {
-  appearance: none;
-  border: 1px solid rgba(128, 128, 128, 0.28);
-  background: transparent;
-  color: inherit;
-  border-radius: 8px;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.lut-subhead__title {
-  font-size: 15px;
-  font-weight: 700;
-}
-
-/* Preset swatch cards */
-.lut-presets {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.lut-preset {
-  appearance: none;
-  border: 1px solid rgba(128, 128, 128, 0.24);
-  background: transparent;
-  color: inherit;
-  border-radius: 12px;
+  isolation: isolate;
   overflow: hidden;
-  cursor: pointer;
-  text-align: left;
-  padding: 0;
-}
-
-.lut-preset__swatch {
-  height: 46px;
-}
-
-.lut-preset__swatch.is-cine {
-  background: linear-gradient(125deg, #164e63 0%, #d97706 100%);
-}
-
-.lut-preset__swatch.is-bw {
-  background: linear-gradient(125deg, #111 0%, #d4d4d8 100%);
-}
-
-.lut-preset__body {
-  padding: 9px 10px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  font-weight: 600;
+  min-height: 214px;
+  padding: 26px clamp(20px, 3.5%, 40px);
+  background: linear-gradient(110deg, var(--lut-surface) 12%, var(--lut-accent-soft) 90%);
+  color: var(--lut-ink);
 }
-
-.lut-foot-note {
-  text-align: center;
-  font-size: 11px;
-  opacity: 0.6;
-  margin: 2px 0 0;
+.lut-camera-art {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 0 auto;
+  width: 40%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 58% 82%, #6692b72b, transparent 70%);
 }
-
-@media (max-width: 560px) {
-  .lut-subgrid {
-    grid-template-columns: 1fr;
+.lut-camera-art img {
+  position: absolute;
+  max-height: 105%;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  right: 7%;
+  bottom: -8%;
+  filter: drop-shadow(0 8px 9px #20385224);
+}
+.lut-activation__copy { width: 61%; }
+.lut-state { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--lut-muted); }
+.lut-state i { background: currentColor; width: 7px; height: 7px; border-radius: 50%; }
+.lut-state.is-ready { color: var(--lut-accent); }
+.lut-state.is-active { color: var(--lut-success); }
+.lut-state.is-unsupported { color: var(--lut-warning); }
+.lut-activation h2 { margin: 7px 0 4px; font-size: clamp(23px, 3.1vw, 31px); font-weight: 650; line-height: 1.3; letter-spacing: -.025em; color: var(--lut-ink); }
+.lut-activation__copy p { margin: 0; max-width: 47em; font-size: 14px; line-height: 1.65; color: var(--lut-muted); }
+.lut-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 20px; }
+.lut-actions:empty { display: none; }
+.lut-studio .lut-btn, .lut-dialog .lut-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 41px; padding: 8px 16px; border: 1px solid var(--lut-border);
+  border-radius: 8px; background: var(--lut-surface); color: var(--lut-ink);
+  font: inherit; font-size: 14px; font-weight: 600; line-height: 1.4; cursor: pointer;
+}
+.lut-studio .lut-btn.is-light, .lut-studio .lut-btn.is-primary, .lut-dialog .lut-btn.is-primary {
+  background: var(--lut-accent); border-color: transparent; color: var(--lut-on-button);
+}
+.lut-studio .lut-btn:not(:disabled):hover, .lut-dialog .lut-btn:hover { filter: brightness(.95); }
+.lut-studio button:disabled { cursor: default; opacity: .55; }
+.lut-studio .lut-settings-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 4px; border: 0; color: var(--lut-accent); background: transparent; cursor: pointer; font-size: 13px; }
+.lut-settings-toggle .anticon-down { font-size: 9px; }
+.lut-settings-toggle .is-open { transform: rotate(180deg); }
+.lut-settings { display: flex; flex-wrap: wrap; align-items: end; gap: 16px 28px; padding: 18px 24px; background: var(--lut-inset); }
+.lut-settings fieldset { border: none; margin: 0; padding: 0; }
+.lut-settings legend { margin-bottom: 5px; font-size: 13px; font-weight: 650; color: var(--lut-muted); }
+.lut-mode-options { display: flex; flex-wrap: wrap; gap: 12px; }
+.lut-mode-options label, .lut-check { display: inline-flex; gap: 7px; align-items: center; min-height: 36px; font-size: 14px; cursor: pointer; }
+.lut-settings input { accent-color: var(--lut-accent); }
+.lut-firmware-note { font-size: 13px; color: var(--lut-warning); overflow-wrap: anywhere; }
+.lut-live { padding: 16px 24px; border-top: 1px solid var(--lut-border); background: var(--lut-accent-soft); color: var(--lut-accent); }
+.lut-live > div { display: flex; align-items: center; gap: 8px; }
+.lut-live b { margin-left: auto; }
+.lut-live progress { display: block; width: 100%; height: 8px; margin: 8px 0; accent-color: var(--lut-accent); }
+.lut-live > span { font-size: 13px; }
+.lut-result { display: flex; align-items: center; gap: 9px; margin: 0; padding: 14px 22px; background: var(--lut-success-soft); color: var(--lut-success); overflow-wrap: anywhere; }
+.lut-result.is-error { color: var(--lut-danger); background: var(--lut-danger-soft); }
+.lut-entry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.lut-studio .lut-entry {
+  display: flex; flex-direction: column; min-width: 0; text-align: start; padding: 0; overflow: hidden;
+  background: var(--lut-surface); border: 1px solid var(--lut-border); border-radius: 14px; color: var(--lut-ink);
+  cursor: pointer; transition: border-color .15s, box-shadow .15s;
+}
+.lut-entry:not(:disabled):hover { border-color: var(--lut-accent); box-shadow: 0 4px 14px #1c406012; }
+.lut-entry-art { height: 104px; width: 100%; overflow: hidden; position: relative; }
+.lut-entry-art.is-transfer { background: linear-gradient(110deg, var(--lut-inset), var(--lut-accent-soft)); }
+.lut-palette {
+  display: flex; position: absolute; width: 74%; height: 115%; left: 16%; top: 25%;
+  transform: rotate(-11deg); border: 7px solid #f9fafb; border-radius: 5px;
+  background: #f9fafb; gap: 2px; box-shadow: 0 4px 12px #28394a33;
+}
+.lut-palette i { flex: 1; background: #24444b; }
+.lut-palette i:nth-child(2) { background: #3d7073; }
+.lut-palette i:nth-child(3) { background: #81a59b; }
+.lut-palette i:nth-child(4) { background: #b7c6b1; }
+.lut-palette i:nth-child(5) { background: #f1d9ac; }
+.lut-palette i:nth-child(6) { background: #da9b74; }
+.lut-palette i:nth-child(7) { background: #b96e55; }
+.lut-palette i:nth-child(8) { background: #824e4b; }
+.lut-entry-art.is-guide {
+  display: grid; place-items: center; padding: 6px;
+  background: linear-gradient(110deg, var(--lut-inset), var(--lut-accent-soft));
+}
+.lut-menu-thumb {
+  display: grid; gap: 4px; width: min(66%, 206px); padding: 7px 10px 9px;
+  border: 1px solid #51627b; border-radius: 5px; background: #222d3f;
+}
+.lut-menu-thumb__heading { color: #b9dbff; font: 600 12px/1.3 sans-serif; }
+.lut-menu-thumb__selection {
+  display: flex; align-items: center; justify-content: space-between; gap: 2px;
+  padding: 2px 5px; border-radius: 2px; color: #252616; background: #ffd85a;
+  font: 700 12px/1.35 sans-serif;
+}
+.lut-menu-thumb__selection .anticon { font-size: 10px; }
+.lut-menu-thumb i { height: 5px; border-radius: 1px; background: #63738b; }
+.lut-menu-thumb i:last-child { width: 73%; }
+.lut-entry-body { flex: 1; display: flex; flex-direction: column; padding: 18px 21px; }
+.lut-entry-title { display: flex; align-items: center; gap: 10px; }
+.lut-entry-title h3 { font-size: 19px; line-height: 1.4; font-weight: 650; color: inherit; margin: 0; }
+.lut-beta { color: var(--lut-warning); background: var(--lut-warning-soft); border-radius: 5px; padding: 1px 6px; font-size: 11px; line-height: 1.55; font-weight: 650; }
+.lut-entry p { color: var(--lut-muted); font-size: 14px; line-height: 1.65; margin: 7px 0 17px; }
+.lut-entry-link { display: inline-flex; align-items: center; gap: 9px; margin-top: auto; color: var(--lut-accent); font-size: 13px; font-weight: 650; }
+.lut-detail-head { display: flex; gap: 14px; align-items: center; margin: 0 0 15px; }
+.lut-detail-head h2 { font-size: 20px; line-height: 1.4; margin: 0; font-weight: 650; color: var(--lut-ink); }
+.lut-studio .lut-back { display: flex; gap: 6px; align-items: center; min-height: 36px; padding: 5px 10px; border: 1px solid var(--lut-border); border-radius: 7px; color: var(--lut-muted); background: var(--lut-surface); cursor: pointer; font-size: 13px; }
+.lut-dialog .ant-modal-container { border-radius: 16px; background: var(--lut-surface); padding: 26px; }
+.lut-dialog-icon { width: 45px; height: 45px; display: grid; place-items: center; border-radius: 50%; font-size: 22px; color: var(--lut-success); background: var(--lut-success-soft); }
+.lut-dialog-icon.is-restore { background: var(--lut-inset); color: var(--lut-muted); }
+.lut-dialog .ant-modal-header { background: transparent; }
+.lut-dialog-title { display: block; color: var(--lut-ink); font-size: 22px; line-height: 1.35; margin: 15px 0 7px; }
+.lut-dialog p { color: var(--lut-muted); margin: 0; font-size: 14px; line-height: 1.7; }
+.lut-dialog-actions { display: flex; justify-content: end; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+@container (max-width: 600px) {
+  .lut-activation__hero { padding: 20px; min-height: 190px; }
+  .lut-camera-art { width: 38%; }
+  .lut-camera-art img { right: -8%; bottom: 14%; max-width: 115%; }
+  .lut-entry-grid { grid-template-columns: minmax(0,1fr); gap: 12px; margin-top: 12px; }
+  .lut-studio .lut-entry { flex-direction: row-reverse; }
+  .lut-entry-art { align-self: stretch; width: 27%; height: auto; flex-shrink: 0; }
+  .lut-menu-thumb { width: 100%; max-width: 126px; padding: 5px; }
+  .lut-palette { width: 160%; left: 14%; top: 18%; transform: rotate(17deg); }
+  .lut-entry-body { padding: 16px; }
+  .lut-entry-title h3 { font-size: 17px; }
+  .lut-entry p { font-size: 13px; margin: 5px 0 12px; }
+  .lut-settings { padding: 14px 16px; gap: 10px; align-items: start; flex-direction: column; }
+  .lut-live { padding: 14px 16px; }
+}
+@media (prefers-color-scheme: dark) {
+  .app-shell .lut-studio, body:has(.app-shell) .lut-dialog {
+    --lut-on-button: #132537;
+    --lut-success: #87e0a8; --lut-success-soft: #20372a;
+    --lut-warning: #ffcd80; --lut-warning-soft: #3e3222;
+    --lut-danger: #ffafb2; --lut-danger-soft: #402a2e;
   }
+  /* Ant Design mounts the desktop dialog outside the shell's theme variables. */
+  body:has(.app-shell) .lut-dialog {
+    --lut-surface: #282a2d; --lut-inset: #25272a; --lut-border: #454a50;
+    --lut-ink: #edf0f3; --lut-muted: #b9c1c9; --lut-accent: #83c4ff; --lut-accent-soft: #213b53;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lut-studio *, .lut-dialog * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

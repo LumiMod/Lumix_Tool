@@ -9,8 +9,8 @@ android {
         applicationId 'tools.lumix.mobile'
         minSdk 26
         targetSdk 35
-        versionCode 302
-        versionName '0.3.2'
+        versionCode 402
+        versionName '0.4.2'
     }
     sourceSets.main.assets.srcDir layout.buildDirectory.dir('generated/web')
     testOptions {

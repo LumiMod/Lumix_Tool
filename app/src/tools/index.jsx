@@ -9,8 +9,9 @@ export const tools = [
     id: 'lut-direct',
     title: '实时 LUT 直出',
     icon: <BgColorsOutlined />,
-    description: '纯 RAM 启用 DC-S5 静态照片 JPEG 实时 3D LUT 直出，原生联动 V-Log 查看助手。',
-    scope: '写入 RAM · DC-S5',
+    description: '拍摄时将选定的 LUT 应用到 JPEG 照片。',
+    scope: 'DC-S5 · 固件 2.9',
+    offline: true,
     component: LutDirect,
   },
   {

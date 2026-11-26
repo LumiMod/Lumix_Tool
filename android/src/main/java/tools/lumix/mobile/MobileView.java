@@ -15,7 +15,7 @@ import androidx.webkit.WebViewAssetLoader;
 import org.json.JSONObject;
 
 final class MobileView extends WebView {
-    static final int PICK_AUDIO = 1;
+    static final int PICK_FILE = 1;
     static final int SAVE_JSON = 2;
 
     interface RpcHandler {
@@ -46,10 +46,13 @@ final class MobileView extends WebView {
                                                        FileChooserParams params) {
                 finishPicker(Activity.RESULT_CANCELED, null);
                 picker = result;
-                Intent choose = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("audio/*")
+                // CUBE and VLT have no standard Android MIME type.
+                String[] accepted = params.getAcceptTypes();
+                boolean audio = accepted != null && accepted.length == 1 && "audio/*".equals(accepted[0]);
+                Intent choose = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(audio ? "audio/*" : "*/*")
                         .addCategory(Intent.CATEGORY_OPENABLE);
                 try {
-                    activity.startActivityForResult(choose, PICK_AUDIO);
+                    activity.startActivityForResult(choose, PICK_FILE);
                 } catch (ActivityNotFoundException error) {
                     finishPicker(Activity.RESULT_CANCELED, null);
                 }

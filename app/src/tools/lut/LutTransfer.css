@@ -1,0 +1,193 @@
+.lut-transfer {
+  overflow: hidden;
+  border: 1px solid var(--lut-border);
+  border-radius: 16px;
+  background: var(--lut-surface);
+  color: var(--lut-ink);
+}
+
+.lut-transfer button, .lut-transfer select { font: inherit; }
+.lut-transfer button { cursor: pointer; }
+.lut-transfer button:disabled { cursor: default; }
+.lut-transfer button:focus-visible, .lut-transfer select:focus-visible {
+  outline: 2px solid var(--lut-accent);
+  outline-offset: 3px;
+}
+
+.lut-transfer__scope {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 11px 24px;
+  border-bottom: 1px solid var(--lut-border);
+  background: var(--lut-inset);
+  color: var(--lut-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.lut-transfer__scope span { display: inline-flex; align-items: center; gap: 7px; }
+.lut-transfer__scope b {
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--lut-warning-soft);
+  color: var(--lut-warning);
+  font-size: 11px;
+  font-weight: 700;
+}
+.lut-transfer__body { display: grid; gap: 22px; padding: 24px; }
+.lut-transfer h3, .lut-transfer legend {
+  margin: 0 0 10px;
+  padding: 0;
+  color: var(--lut-ink);
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 650;
+}
+.lut-transfer__drop {
+  width: 100%;
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 18px;
+  border: 1px dashed var(--lut-accent);
+  border-radius: 10px;
+  background: var(--lut-surface);
+  color: var(--lut-ink);
+  text-align: start;
+}
+.lut-transfer__drop:not(:disabled):hover, .lut-transfer__drop.is-dragging {
+  border-color: var(--lut-accent);
+  background: var(--lut-accent-soft);
+}
+.lut-transfer__file-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--lut-accent-soft);
+  color: var(--lut-accent);
+  font-size: 22px;
+}
+.lut-transfer__file-text { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.lut-transfer__file-text strong { font-size: 14px; font-weight: 650; }
+.lut-transfer__file-text small, .lut-transfer__presets > span {
+  color: var(--lut-muted);
+  font-size: 12px;
+}
+.lut-transfer__choose { margin-inline-start: auto; flex: none; color: var(--lut-accent); font-size: 12px; }
+.lut-transfer__presets { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: 10px; }
+.lut-transfer__presets button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 3px 10px;
+  border: 1px solid var(--lut-border);
+  border-radius: 6px;
+  background: var(--lut-surface);
+  color: var(--lut-ink);
+  font-size: 12px;
+}
+.lut-transfer__presets button[aria-pressed="true"], .lut-transfer__presets button:not(:disabled):hover {
+  border-color: var(--lut-accent);
+  background: var(--lut-accent-soft);
+}
+.lut-transfer__swatch { width: 17px; height: 13px; border-radius: 3px; }
+.lut-transfer__swatch.is-cinewarm { background: linear-gradient(125deg, #315d63 0 48%, #cd905d 49%); }
+.lut-transfer__swatch.is-bw { background: linear-gradient(125deg, #333840 0 48%, #b6b9bd 49%); }
+.lut-transfer__destinations { min-width: 0; margin: 0; padding: 0; border: 0; }
+.lut-transfer__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lut-transfer__option {
+  position: relative;
+  display: grid;
+  grid-template-columns: 17px 1fr;
+  align-content: start;
+  align-items: center;
+  gap: 5px 9px;
+  padding: 14px;
+  border: 1px solid var(--lut-border);
+  border-radius: 10px;
+  cursor: pointer;
+  line-height: 1.55;
+}
+.lut-transfer__option.is-selected {
+  border-color: var(--lut-accent);
+  background: var(--lut-accent-soft);
+}
+.lut-transfer__option input { width: 16px; height: 16px; margin: 0; accent-color: var(--lut-accent); }
+.lut-transfer__option strong { font-size: 14px; font-weight: 650; }
+.lut-transfer__option span { grid-column: 2; color: var(--lut-muted); font-size: 12px; }
+.lut-transfer__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--lut-border);
+}
+.lut-transfer__slot, .lut-transfer__connection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--lut-muted);
+  font-size: 13px;
+}
+.lut-transfer__slot select {
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid var(--lut-border);
+  border-radius: 6px;
+  background: var(--lut-surface);
+  color: var(--lut-ink);
+}
+.lut-transfer__connection, .lut-transfer__submit { margin-inline-start: auto; }
+.lut-transfer__progress, .lut-transfer__result {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--lut-accent-soft);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.lut-transfer__progress > div { display: flex; align-items: baseline; justify-content: space-between; }
+.lut-transfer__progress b { color: var(--lut-accent); font-variant-numeric: tabular-nums; }
+.lut-transfer__progress progress { width: 100%; height: 7px; accent-color: var(--lut-accent); }
+.lut-transfer__progress small, .lut-transfer__result small { color: var(--lut-muted); font-size: 12px; }
+.lut-transfer__result { grid-template-columns: auto 1fr; align-items: baseline; gap: 10px; }
+.lut-transfer__result small { display: block; margin-top: 3px; }
+.lut-transfer__result p { margin: 4px 0 0; line-height: 1.55; }
+.lut-transfer__result > .anticon { color: var(--lut-success); }
+.lut-transfer__result.is-error { border-inline-start: 3px solid var(--lut-danger); background: var(--lut-danger-soft); }
+.lut-transfer__result.is-error > .anticon { color: var(--lut-danger); }
+.lut-transfer__guide {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--lut-accent);
+}
+.lut-transfer__guide .anticon { font-size: 11px; }
+.lut-studio .lut-transfer__submit[aria-busy="true"]:disabled { opacity: 1; cursor: progress; }
+.lut-transfer__percent { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .lut-transfer__scope { padding: 10px 15px; }
+  .lut-transfer__body { gap: 18px; padding: 16px; }
+  .lut-transfer__options { grid-template-columns: minmax(0, 1fr); }
+  .lut-transfer__option { padding: 12px; }
+  .lut-transfer__drop { padding: 12px; }
+  .lut-transfer__connection { margin-inline-start: 0; }
+}
+@media (max-width: 440px) {
+  .lut-transfer__submit { width: 100%; }
+}

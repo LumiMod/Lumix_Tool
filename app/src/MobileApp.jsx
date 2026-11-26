@@ -30,31 +30,40 @@ export default function MobileApp({ initialLang = null } = {}) {
 
 function MobileAppShell() {
   const { lang, setLang, t } = useI18n();
-  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.3.2';
+  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.4.2';
   const writeLabel = t('status.busy');
   const keepAwakeHint = t('mobile.audio.keepAwake');
   const restartHint = t('mobile.audio.restartHint');
+  const [lutView, setLutView] = useState(() => globalThis.history?.state?.lutView?.page || 'home');
   const pages = {
     camera: t('nav.connection'),
-    lut: t('mobile.home.lutTitle'),
+    lut: t(lutView === 'guide' ? 'lut.guideTitle' : lutView === 'transfer' ? 'lut.transferTitle' : 'mobile.home.lutTitle'),
     formats: t('mobile.home.formatsTitle'),
     audio: t('mobile.home.audioTitle'),
     settings: t('settings.title'),
   };
 
   const [page, setPage] = useState(() => (typeof history !== 'undefined' ? history.state?.tool : null) || null);
+  const [lutSession, setLutSession] = useState(page === 'lut' ? 1 : 0);
+  const [lutPending, setLutPending] = useState(false);
+  const lutBack = useRef(null);
+  const returnFocus = useRef(null);
   useEffect(() => {
-    const restorePage = () => setPage(history.state?.tool || null);
+    const restorePage = () => {
+      returnFocus.current = history.state?.returnFocus || null;
+      setPage(history.state?.tool || null);
+    };
     window.addEventListener('popstate', restorePage);
     return () => window.removeEventListener('popstate', restorePage);
   }, []);
 
-  const previousTool = useRef(null);
   const heading = useRef(null);
   const pageRef = useRef(page);
   pageRef.current = page;
 
-  const goHome = useCallback(() => {
+  const goBack = useCallback(() => {
+    if (pageRef.current === 'lut' && lutBack.current?.()) return;
+    if (history.state?.appEntry) { history.back(); return; }
     setPage(null);
     try { history.replaceState(null, '', window.location.pathname); } catch {}
   }, []);
@@ -62,17 +71,22 @@ function MobileAppShell() {
   useEffect(() => {
     window.__lumixBack = () => {
       if (pageRef.current) {
-        goHome();
+        goBack();
         return true;
       }
       return false;
     };
     return () => { delete window.__lumixBack; };
-  }, [goHome]);
+  }, [goBack]);
 
   function openTool(tool) {
-    previousTool.current = tool;
-    try { history.pushState({ tool }, '', '#' + tool); } catch {}
+    if (page === tool) return;
+    returnFocus.current = null;
+    if (tool === 'lut') setLutSession(current => current + 1);
+    try {
+      history.replaceState({ ...history.state, returnFocus: document.activeElement?.id || (!page && 'tool-' + tool) }, '');
+      history.pushState({ tool, appEntry: true }, '', '#' + tool);
+    } catch {}
     setPage(tool);
   }
 
@@ -154,12 +168,18 @@ function MobileAppShell() {
 
   useEffect(() => {
     if (page !== 'audio') stopPreview();
-    if (page) heading.current?.focus({ preventScroll: true });
-    else if (previousTool.current) document.getElementById('tool-' + previousTool.current)?.focus({ preventScroll: true });
+    const target = returnFocus.current && document.getElementById(returnFocus.current);
+    returnFocus.current = null;
     window.scrollTo(0, 0);
+    // Restore the originating control after the destination has restored its own view.
+    if (target) {
+      const frame = requestAnimationFrame(() => target.focus({ preventScroll: true }));
+      return () => cancelAnimationFrame(frame);
+    }
+    heading.current?.focus({ preventScroll: true });
   }, [page, stopPreview]);
 
-  const isBusy = !!busyLabel || checking;
+  const isBusy = !!busyLabel || checking || (page === 'lut' && lutPending);
   const ready = !!device?.connected && !!device?.soundTable?.ok;
   const firmwareBlocked = !!device?.connected && device?.verified === false;
   const soundTable = device?.soundTable;
@@ -284,6 +304,15 @@ function MobileAppShell() {
   const entryByIndex = new Map(entries.map(e => [e.index, e]));
   const allRows = orderedCatalog.map(item => ({ ...item, ...entryByIndex.get(item.index) }));
 
+  const cameraConnected = !!device?.connected && !device.error;
+  let cameraHint = t('mobile.home.cameraSub');
+  if (checking) cameraHint = t('status.checking');
+  else if (cameraConnected && device.verified) cameraHint = t('mobile.home.fwLabel') + (device.unlock?.unlocked ? t('mobile.home.unlocked6k') : '');
+  else if (cameraConnected && device.body_version) cameraHint = t('mobile.camera.fwBad', { ver: device.body_version });
+  else if (cameraConnected) cameraHint = t('nav.connection');
+  else if (device?.mode === 'ptp') cameraHint = t('status.needService');
+  else if (device?.error) cameraHint = t('status.error');
+
   const pct = progress && progress.total > 0
     ? Math.min(100, Math.max(0, Math.round((progress.done / progress.total) * 100)))
     : 0;
@@ -304,7 +333,7 @@ function MobileAppShell() {
   }}>
     <main className="mobile-shell">
       <header className="mobile-bar">
-        {page && <button className="back-key" aria-label={t('nav.back')} onClick={goHome}><ArrowLeftOutlined /></button>}
+        {page && <button className="back-key" aria-label={t('nav.back')} disabled={page === 'lut' && lutPending} onClick={goBack}><ArrowLeftOutlined /></button>}
         <div className="wordmark"><span className="brand-tile" aria-hidden="true"><i /></span>Lumix<span>Tool</span></div>
         <div className="mobile-bar__right">
           <button
@@ -330,8 +359,8 @@ function MobileAppShell() {
         </div>
       </header>
 
-      <div className="mobile-content" key={page || 'home'}>
-        {page && <h1 className="mobile-title" ref={heading} tabIndex="-1">{pages[page]}</h1>}
+      <div className="mobile-content">
+        {page && <h1 id="mobile-page-heading" className="mobile-title" ref={heading} tabIndex="-1">{pages[page]}</h1>}
 
         {device?.mock && <div className="mock-strip" role="status">
           <span>{t('mobile.mockStrip')}</span>
@@ -342,15 +371,11 @@ function MobileAppShell() {
         {!page && <nav aria-label={t('nav.tools')} className="home-grid">
           <button id="tool-camera" className="hero-card" onClick={() => openTool('camera')}>
             <div className="hero-card__copy">
-              <span className={'hero-tag' + (device?.connected ? ' is-live' : '')}>
-                {device?.connected ? t('mobile.home.cameraReady') : 'LUMIX DC-S5'}
+              <span className={'hero-tag' + (cameraConnected ? ' is-live' : '')}>
+                {cameraConnected ? t('mobile.home.cameraReady') : 'LUMIX DC-S5'}
               </span>
-              <strong>{device?.connected ? t('mobile.home.cameraConnected') : t('mobile.home.cameraConnect')}</strong>
-              <small>
-                {device?.connected
-                  ? `${t('mobile.home.fwLabel')}${device.unlock?.unlocked ? t('mobile.home.unlocked6k') : ''}`
-                  : t('mobile.home.cameraSub')}
-              </small>
+              <strong>{cameraConnected ? t('mobile.home.cameraConnected') : t('mobile.home.cameraConnect')}</strong>
+              <small>{cameraHint}</small>
             </div>
             <div className="hero-card__visual" aria-hidden="true" />
           </button>
@@ -436,7 +461,12 @@ function MobileAppShell() {
         </section>}
 
         {/* 实时 LUT 直出页 */}
-        {page === 'lut' && <LutDirect
+        {(lutSession > 0 || page === 'lut') && <div hidden={page !== 'lut'}><LutDirect
+          key={lutSession}
+          active={page === 'lut'}
+          backHandlerRef={lutBack}
+          onBusyChange={setLutPending}
+          onViewChange={setLutView}
           mobile
           deviceState={device}
           busy={isBusy}
@@ -452,7 +482,7 @@ function MobileAppShell() {
             false,
           )}
           onSaveVlt={(filename, content) => invokeNative('saveVlt', { filename, content })}
-        />}
+        /></div>}
 
         {/* 片门全开解锁页 */}
         {page === 'formats' && <OpenGate

@@ -36,4 +36,7 @@ tools/armgcc/
 payloads/*.elf
 
 Lumix_Tool/
+*.jks
+*.keystore
+android/keystore.properties
 

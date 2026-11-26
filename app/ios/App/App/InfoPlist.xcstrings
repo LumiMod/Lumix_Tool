@@ -1,0 +1,28 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSCameraUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LumixTool uses camera access to identify external cameras when you check the USB connection."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LumixToolは、USB接続を確認するときに外付けカメラを識別するため、カメラへのアクセスを使用します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LumixTool 需要相机权限，以便在你检查 USB 连接时识别外接相机。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

@@ -4,13 +4,23 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+const platformEntries = {
+  android: './src/MobileApp.jsx',
+  ios: './src/ios/IosApp.jsx',
+};
 
 export default defineConfig(({ command, mode }) => ({
   resolve: { alias: { '@platform-app': fileURLToPath(new URL(
-    mode === 'android' ? './src/MobileApp.jsx' : './src/App.jsx', import.meta.url)) } },
+    platformEntries[mode] ?? './src/App.jsx', import.meta.url)) } },
   base: './',
   define: { __APP_VERSION__: JSON.stringify(version) },
-  plugins: [react(), {
+  plugins: [react(), mode === 'ios' && {
+    name: 'ios-worker-csp',
+    transformIndexHtml(html) {
+      // The offline LUT converter runs as an embedded worker inside WKWebView.
+      return html.replace("object-src 'none'", "worker-src 'self' blob:; object-src 'none'");
+    },
+  }, {
     name: 'development-csp',
     transformIndexHtml: {
       order: 'post',
@@ -29,5 +39,8 @@ export default defineConfig(({ command, mode }) => ({
     },
   }],
   server: { host: '127.0.0.1', port: 5173, strictPort: true },
-  build: { outDir: 'renderer-dist', emptyOutDir: true },
+  build: {
+    ...(mode === 'ios' ? { outDir: 'ios-dist', target: 'safari16.4' } : { outDir: 'renderer-dist' }),
+    emptyOutDir: true,
+  },
 }));

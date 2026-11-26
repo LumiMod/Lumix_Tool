@@ -101,6 +101,7 @@
 .lut-transfer__swatch.is-cinewarm { background: linear-gradient(125deg, #315d63 0 48%, #cd905d 49%); }
 .lut-transfer__swatch.is-bw { background: linear-gradient(125deg, #333840 0 48%, #b6b9bd 49%); }
 .lut-transfer__destinations { min-width: 0; margin: 0; padding: 0; border: 0; }
+.lut-transfer__card-hint { margin: 0; color: var(--lut-muted); font-size: 13px; line-height: 1.55; }
 .lut-transfer__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .lut-transfer__option {
   position: relative;

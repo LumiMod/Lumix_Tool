@@ -5,7 +5,7 @@ import {
 } from '@ant-design/icons';
 import { useI18n } from '../../i18n';
 import {
-  buildPresetVlt, convertCubeToVlt, encodeLutToBeef, parseCubeText, parseVltText,
+  buildPresetVlt, convertFileToVlt, encodeLutToBeef, parseCubeText, parseVltText,
 } from './vltConverter.mjs';
 import { transferCopy } from './transferCopy';
 import './LutTransfer.css';
@@ -16,18 +16,13 @@ const PRESETS = [
 ];
 const SLOTS = ['Vlog_709', 'SET1', 'SET2', 'SET3', 'SET4'];
 
-async function prepareLut(source, camera) {
+async function prepareLut(source, encodeForCamera, convertCardFile) {
   const preset = source.preset && buildPresetVlt(source.preset);
-  if (preset && !camera) return preset;
-  const text = preset ? preset.content : await source.file.text();
-  const isVlt = /\.vlt$/i.test(source.name);
-  if (!camera && !isVlt) return convertCubeToVlt(text, source.name);
-  const lut = isVlt ? parseVltText(text) : parseCubeText(text);
-  if (camera) return btoa(String.fromCharCode(...encodeLutToBeef(lut)));
-
-  // The SD reader needs a 17-point table and a fixed header. VLT inputs can also be 9-point.
-  const cube = ['LUT_3D_SIZE ' + lut.size, ...lut.data.map(row => row.join(' '))].join('\n');
-  return convertCubeToVlt(cube, source.name);
+  if (preset && !encodeForCamera) return preset;
+  const text = preset ? preset.content : (source.text ?? await source.file.text());
+  if (!encodeForCamera) return convertCardFile(text, source.name);
+  const lut = /\.vlt$/i.test(source.name) ? parseVltText(text) : parseCubeText(text);
+  return encodeForCamera(lut);
 }
 
 function downloadVlt(filename, content) {
@@ -42,7 +37,20 @@ function downloadVlt(filename, content) {
   return { ok: true, download: true };
 }
 
-export default function LutTransfer({ connected, supported, locked, progress, onUpload, onSave, onConnect, onGuide, onPendingChange }) {
+// The SD-only entry shares the file, preset and export workflow without the camera encoder.
+export function LutCardExport({ onPickFile, onSave, onGuide, onPendingChange, convertCardFile, sizeHint }) {
+  return <LutTransferForm {...{ onPickFile, onSave, onGuide, onPendingChange, convertCardFile, sizeHint }} />;
+}
+
+export default function LutTransfer({ onUpload, ...props }) {
+  const writeToCamera = onUpload && ((slot, bytes) => onUpload({
+    slot,
+    beefBase64: btoa(String.fromCharCode(...bytes)),
+  }));
+  return <LutTransferForm {...props} encodeForCamera={encodeLutToBeef} onWrite={writeToCamera} />;
+}
+
+function LutTransferForm({ connected, supported, locked, progress, onWrite, onPickFile, onSave, onConnect, onGuide, onPendingChange, encodeForCamera, convertCardFile = convertFileToVlt, sizeHint }) {
   const { lang } = useI18n();
   const copy = transferCopy[lang] || transferCopy.zh;
   const [source, setSource] = useState(null);
@@ -54,23 +62,47 @@ export default function LutTransfer({ connected, supported, locked, progress, on
   const fileInput = useRef(null);
   const inFlight = useRef(false);
   const groupId = useId();
-  const camera = destination === 'camera';
-  const cameraReady = connected && supported && !!onUpload;
+  const camera = !!encodeForCamera && destination === 'camera';
+  const cameraReady = connected && supported && !!onWrite;
   const busy = !!stage;
   const writeProgress = stage === 'writing' && progress?.phase === 'lut-upload' && progress.total > 0 && Number.isFinite(progress.done)
     ? Math.max(0, Math.min(100, Math.round(progress.done / progress.total * 100)))
     : null;
 
-  function pickFiles(files) {
-    if (!files?.length || inFlight.current) return;
-    const file = files[0];
-    if (files.length !== 1 || !/\.(cube|vlt)$/i.test(file.name)) {
+  function selectSource(next) {
+    if (!next || !/\.(cube|vlt)$/i.test(next.name)) {
       setSource(null);
       setResult({ errorKey: 'invalidType' });
       return;
     }
-    setSource({ file, name: file.name });
+    setSource(next);
     setResult(null);
+  }
+
+  function pickFiles(files) {
+    if (!files?.length || inFlight.current || onPickFile) return;
+    selectSource(files.length === 1 ? { file: files[0], name: files[0].name } : null);
+  }
+
+  async function chooseFile() {
+    if (inFlight.current) return;
+    if (!onPickFile) {
+      fileInput.current?.click();
+      return;
+    }
+    inFlight.current = true;
+    onPendingChange?.(true);
+    setStage('picking');
+    try {
+      const file = await onPickFile();
+      if (file) selectSource(file);
+    } catch (err) {
+      setResult({ errorKey: 'failed', detail: err?.message || String(err) });
+    } finally {
+      setStage(null);
+      inFlight.current = false;
+      onPendingChange?.(false);
+    }
   }
 
   async function submit() {
@@ -84,23 +116,26 @@ export default function LutTransfer({ connected, supported, locked, progress, on
       await new Promise(resolve => setTimeout(resolve, 0));
       let prepared;
       try {
-        prepared = await prepareLut(source, camera);
+        prepared = await prepareLut(source, camera && encodeForCamera, convertCardFile);
       } catch {
         setResult({ errorKey: 'invalidFile' });
         return;
       }
       setStage(camera ? 'writing' : 'saving');
       const response = camera
-        ? await onUpload({ slot, beefBase64: prepared })
+        ? await onWrite(slot, prepared)
         : await (onSave || downloadVlt)(prepared.filename, prepared.content);
       if (response?.canceled) return;
       if (!response?.ok) {
         setResult({ errorKey: 'failed', detail: response?.error });
         return;
       }
-      setResult(camera
-        ? { route: 'camera', slotName: SLOTS[slot], filename: source.name }
-        : { route: 'card', filename: response.path?.split(/[\\/]/).pop() || prepared.filename, download: response.download });
+      if (camera) {
+        setResult({ route: 'camera', slotName: SLOTS[slot], filename: source.name });
+      } else {
+        const filename = (!encodeForCamera && response.filename) || response.path?.split(/[\\/]/).pop() || prepared.filename;
+        setResult({ route: 'card', filename, download: response.download });
+      }
     } catch (err) {
       setResult({ errorKey: 'failed', detail: err?.message || String(err) });
     } finally {
@@ -113,28 +148,28 @@ export default function LutTransfer({ connected, supported, locked, progress, on
   return (
     <div className="lut-transfer">
       <div className="lut-transfer__scope">
-        <span><b>Beta</b>{copy.beta}</span><span><CameraOutlined /> {copy.photos}</span>
+        {encodeForCamera && <span><b>Beta</b>{copy.beta}</span>}<span><CameraOutlined aria-hidden="true" /> {copy.photos}</span>
       </div>
       <div className="lut-transfer__body">
         <section className="lut-transfer__source">
           <h3>{copy.source}</h3>
-          <input
+          {!onPickFile && <input
             ref={fileInput} type="file" accept=".cube,.vlt,.CUBE,.VLT" hidden
             onChange={event => { pickFiles(event.target.files); event.target.value = ''; }}
-          />
+          />}
           <button
-            type="button" disabled={busy} onClick={() => fileInput.current?.click()}
+            type="button" disabled={busy} onClick={chooseFile}
             className={'lut-transfer__drop' + (dragging ? ' is-dragging' : '')}
-            onDragOver={event => { event.preventDefault(); if (!busy) setDragging(true); }}
+            onDragOver={event => { event.preventDefault(); if (!busy && !onPickFile) setDragging(true); }}
             onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false); }}
             onDrop={event => { event.preventDefault(); setDragging(false); pickFiles(event.dataTransfer.files); }}
           >
-            <span className="lut-transfer__file-icon">{source ? <FileOutlined /> : <CloudUploadOutlined />}</span>
+            <span className="lut-transfer__file-icon" aria-hidden="true">{source ? <FileOutlined /> : <CloudUploadOutlined />}</span>
             <span className="lut-transfer__file-text">
               <strong>{source?.name || copy.choose}</strong>
-              <small>{source ? copy.ready : copy.formats}</small>
+              <small>{source ? copy.ready : copy.formats}{sizeHint && ' · ' + sizeHint}</small>
             </span>
-            <span className="lut-transfer__choose">{source ? copy.replace : <UploadOutlined />}</span>
+            <span className="lut-transfer__choose">{source ? copy.replace : <UploadOutlined aria-hidden="true" />}</span>
           </button>
           <div className="lut-transfer__presets">
             <span>{copy.presets}</span>
@@ -148,7 +183,7 @@ export default function LutTransfer({ connected, supported, locked, progress, on
             ))}
           </div>
         </section>
-        <fieldset className="lut-transfer__destinations" disabled={busy}>
+        {encodeForCamera ? <fieldset className="lut-transfer__destinations" disabled={busy}>
           <legend>{copy.destination}</legend>
           <div className="lut-transfer__options">
             {['camera', 'card'].map(route => (
@@ -162,7 +197,7 @@ export default function LutTransfer({ connected, supported, locked, progress, on
               </label>
             ))}
           </div>
-        </fieldset>
+        </fieldset> : <p className="lut-transfer__card-hint">{copy.cardHint}</p>}
         <div className="lut-transfer__actions">
           {camera && (
             <label className="lut-transfer__slot">
@@ -181,7 +216,7 @@ export default function LutTransfer({ connected, supported, locked, progress, on
                 type="button" className="lut-btn is-primary lut-transfer__submit" aria-busy={busy}
                 disabled={!source || busy || (camera && locked)} onClick={submit}
               >
-                {busy ? <LoadingOutlined /> : camera ? <UploadOutlined /> : <DownloadOutlined />}
+                {busy ? <LoadingOutlined aria-hidden="true" /> : camera ? <UploadOutlined aria-hidden="true" /> : <DownloadOutlined aria-hidden="true" />}
                 {busy ? copy[stage] : camera ? copy.write : copy.save}
                 {writeProgress !== null && <span className="lut-transfer__percent">{writeProgress}%</span>}
               </button>}
@@ -196,18 +231,18 @@ export default function LutTransfer({ connected, supported, locked, progress, on
         )}
         {result?.errorKey && (
           <div className="lut-transfer__result is-error" role="alert">
-            <WarningOutlined /><div><strong>{copy[result.errorKey]}</strong>{result.detail && <p>{result.detail}</p>}</div>
+            <WarningOutlined aria-hidden="true" /><div><strong>{copy[result.errorKey]}</strong>{result.detail && <p>{result.detail}</p>}</div>
           </div>
         )}
         {result?.route && (
           <div className="lut-transfer__result" role="status">
-            <CheckCircleFilled />
+            <CheckCircleFilled aria-hidden="true" />
             <div>
               <strong>{result.route === 'camera' ? copy.written(result.slotName) : copy[result.download ? 'downloaded' : 'saved']}</strong>
               <small>{result.filename}</small>
               <p>{result.route === 'camera' ? copy.writtenHint : copy.savedHint}</p>
               <button type="button" className="lut-transfer__guide" onClick={() => onGuide(result.route)}>
-                {copy.guide}<RightOutlined />
+                {copy.guide}<RightOutlined aria-hidden="true" />
               </button>
             </div>
           </div>

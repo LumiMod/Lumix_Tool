@@ -135,6 +135,14 @@ export function convertCubeToVlt(cubeText, sourceFilename = 'CUSTOM.cube') {
   };
 }
 
+export function convertFileToVlt(text, filename) {
+  if (!/\.vlt$/i.test(filename)) return convertCubeToVlt(text, filename);
+  const lut = parseVltText(text);
+  // The card reader requires a fixed header and a 17-point table, even for 9-point VLT inputs.
+  const cube = ['LUT_3D_SIZE ' + lut.size, ...lut.data.map(row => row.join(' '))].join('\n');
+  return convertCubeToVlt(cube, filename);
+}
+
 function vlogSCurve(x) {
   const t = clamp01((x - 0.12) / 0.68);
   return clamp01(t * t * (3 - 2 * t));

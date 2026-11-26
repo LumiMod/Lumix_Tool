@@ -111,6 +111,8 @@ LumixTool 是给初代 Panasonic LUMIX DC-S5 使用的离线工具箱。Windows 
 
 ## 开发
 
+iOS 开发分支支持离线 LUT 转换、菜单教程和只读 USB 相机识别。Mac mini 上的环境要求、模拟器编译和真机签名步骤见 [iOS 构建说明](docs/IOS_BUILD.md)。
+
 ```sh
 cd app
 npm ci

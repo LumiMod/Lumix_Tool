@@ -1,0 +1,2 @@
+# Capacitor regenerates this Swift package manifest with LF on every platform.
+App/CapApp-SPM/Package.swift text eol=lf

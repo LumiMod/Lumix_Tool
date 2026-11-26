@@ -8,7 +8,7 @@ export default function Settings({ device }) {
   const [feedback, setFeedback] = useState(null);
   const [starError, setStarError] = useState('');
   const { env, locked } = device;
-  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.4.2';
+  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.4.3';
 
   async function choosePython() {
     const result = await device.pickPython();

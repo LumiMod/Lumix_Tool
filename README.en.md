@@ -4,7 +4,7 @@
 
 A local, offline toolkit for Panasonic LUMIX cameras. Apply a LUT to JPEG photos as you shoot, unlock 6K Open Gate and unlimited recording, or customize all 28 camera sounds over Service Mode USB. No firmware flashing is required.
 
-**Download v0.4.2**　[Windows x64 ZIP](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.2/LumixTool-0.4.2-win-x64.zip) · [Android APK](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.2/LumixTool-0.4.2.apk) · [Release notes and checksums](https://github.com/USER-HFC/Lumix_Tool/releases/tag/v0.4.2)
+**Download v0.4.3**　[Windows x64 ZIP](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3-win-x64.zip) · [Android APK](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3.apk) · [Release notes and checksums](https://github.com/USER-HFC/Lumix_Tool/releases/tag/v0.4.3)
 
 > **Supported camera**　Panasonic DC-S5 (Mark I) with official firmware 2.9. Writing a LUT directly to the camera is a beta feature awaiting hardware testing.
 

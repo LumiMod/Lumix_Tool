@@ -4,7 +4,7 @@
 
 LumixTool 是给初代 Panasonic LUMIX DC-S5 使用的离线工具箱。Windows 和 Android 都可以用它拍摄套用 LUT 的 JPEG 照片、开启 6K 片门全开与不限时录制，以及自定义机身的 28 项提示音。
 
-**下载 v0.4.2**　[Windows x64 免安装包](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.2/LumixTool-0.4.2-win-x64.zip) · [Android APK](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.2/LumixTool-0.4.2.apk) · [版本说明与校验值](https://github.com/USER-HFC/Lumix_Tool/releases/tag/v0.4.2)
+**下载 v0.4.3**　[Windows x64 免安装包](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3-win-x64.zip) · [Android APK](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3.apk) · [版本说明与校验值](https://github.com/USER-HFC/Lumix_Tool/releases/tag/v0.4.3)
 
 > **适用机型**　松下 DC-S5（一代），官方固件 2.9。LUT 直接写入机身仍为 Beta，尚未经真机验证。
 

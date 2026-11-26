@@ -30,7 +30,7 @@ export default function MobileApp({ initialLang = null } = {}) {
 
 function MobileAppShell() {
   const { lang, setLang, t } = useI18n();
-  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.4.2';
+  const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.4.3';
   const writeLabel = t('status.busy');
   const keepAwakeHint = t('mobile.audio.keepAwake');
   const restartHint = t('mobile.audio.restartHint');

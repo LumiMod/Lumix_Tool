@@ -6,7 +6,7 @@ Panasonic LUMIX カメラ向けのローカル・オフラインツールボッ�
 
 Windows 版と Android 版のどちらでも、初代 DC-S5 で LUT を適用した JPEG 写真を撮影できます。
 
-**v0.4.2 ダウンロード**　[Windows x64 用 ZIP](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.2/LumixTool-0.4.2-win-x64.zip) · [Android 用 APK](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.2/LumixTool-0.4.2.apk) · [リリースノートとチェックサム](https://github.com/USER-HFC/Lumix_Tool/releases/tag/v0.4.2)
+**v0.4.3 ダウンロード**　[Windows x64 用 ZIP](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3-win-x64.zip) · [Android 用 APK](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3.apk) · [リリースノートとチェックサム](https://github.com/USER-HFC/Lumix_Tool/releases/tag/v0.4.3)
 
 > **対応機種**　Panasonic DC-S5（初代）、公式ファームウェア 2.9。LUT をカメラに直接書き込む機能はベータ版で、実機では未検証です。
 

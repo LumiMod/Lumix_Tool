@@ -2,11 +2,11 @@
 
 **简体中文** | [English](README.en.md) | [日本語](README.ja.md)
 
-LumixTool 是给初代 Panasonic LUMIX DC-S5 使用的离线工具箱。Windows 和 Android 都可以用它拍摄套用 LUT 的 JPEG 照片、开启 6K 片门全开与不限时录制，以及自定义机身的 28 项提示音。
+LumixTool 是面向 Panasonic LUMIX 相机的本地离线工具箱。Windows 和 Android 都可以用它拍摄套用 LUT 的 JPEG 照片、开启 6K 片门全开与不限时录制，以及自定义机身提示音。
 
-**下载 v0.4.3**　[Windows x64 免安装包](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3-win-x64.zip) · [Android APK](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3.apk) · [版本说明与校验值](https://github.com/USER-HFC/Lumix_Tool/releases/tag/v0.4.3)
+**下载 v0.4.3**　[Windows x64 免安装包](https://github.com/LumiMod/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3-win-x64.zip) · [Android APK](https://github.com/LumiMod/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3.apk) · [版本说明与校验值](https://github.com/LumiMod/Lumix_Tool/releases/tag/v0.4.3)
 
-> **适用机型**　松下 DC-S5（一代），官方固件 2.9。LUT 直接写入机身仍为 Beta，尚未经真机验证。
+> **当前支持机型**　现阶段已适配松下 DC-S5（一代，官方固件 2.9），更多 LUMIX 机型正在陆续适配中。LUT 直接写入机身仍为 Beta，尚未经真机验证。
 
 - 对机身的修改保存在 **RAM** 中。用电源开关重启后仍然有效，拔电池或恢复出厂设置后会还原。
 - 音效写在相机 RAM 的暂存区（`0x8F000000` 起）里，写入前会检查，不会覆盖其它已写入的音效。首次替换时建议先选一段短音频，试用一个音效。
@@ -47,7 +47,7 @@ LumixTool 是给初代 Panasonic LUMIX DC-S5 使用的离线工具箱。Windows 
 
 ## Android 版（APK）
 
-安卓版可以用手机通过 USB OTG 离线连接松下 LUMIX DC-S5 一代。需要 Android 8.0 或更高版本、支持 USB Host（OTG）的手机，以及能传输数据的 USB 线。片门全开与音效替换适用于相机官方固件 2.9。
+安卓版可以用手机通过 USB OTG 离线连接支持的 Panasonic LUMIX 相机（现阶段已适配 DC-S5 官方固件 2.9）。需要 Android 8.0 或更高版本、支持 USB Host（OTG）的手机，以及能传输数据的 USB 线。
 
 | 页面 | 可以做什么 |
 |---|---|
@@ -64,7 +64,7 @@ LumixTool 是给初代 Panasonic LUMIX DC-S5 使用的离线工具箱。Windows 
   <img src="docs/images/android-connection.png" alt="安卓版连接引导，按住回放和 AF-ON 键时将电源拨到 ON" width="300">
 </p>
 
-**安装与首次连接**　从 [Releases](https://github.com/USER-HFC/Lumix_Tool/releases) 下载最新的 `LumixTool-*.apk`（调试签名，系统可能提示来源未知，允许安装即可）。启动后选择语言，点「连接相机」，跟随动画开机，通过 OTG 接好相机，并在 Android 弹窗中允许 USB 访问。
+**安装与首次连接**　从 [Releases](https://github.com/LumiMod/Lumix_Tool/releases) 下载最新的 `LumixTool-*.apk`（首次安装系统可能提示来源未知，允许安装即可）。启动后选择语言，点「连接相机」，跟随动画开机，通过 OTG 接好相机，并在 Android 弹窗中允许 USB 访问。
 
 ## Windows v0.3.2 截图
 
@@ -86,10 +86,10 @@ LumixTool 是给初代 Panasonic LUMIX DC-S5 使用的离线工具箱。Windows 
 ## Windows 版系统要求与使用步骤
 
 - Windows 10 / 11（64 位）；macOS / Linux 只能用模拟模式开发界面。
-- Panasonic LUMIX DC-S5（v2.9 固件），以及一根能传数据的 USB 线。
+- 受支持的 Panasonic LUMIX 相机（现阶段已适配 DC-S5 v2.9 固件），以及一根能传数据的 USB 线。
 - 不需要单独安装 Python，安装包里已经自带。
 
-1. 到 [Releases](https://github.com/USER-HFC/Lumix_Tool/releases) 下载 `LumixTool-<版本>-win-x64.zip`，**全部解压到桌面或「文档」**后双击 `LumixTool.exe`（首次运行 SmartScreen 拦截时点「更多信息 → 仍要运行」）。
+1. 到 [Releases](https://github.com/LumiMod/Lumix_Tool/releases) 下载 `LumixTool-<版本>-win-x64.zip`，**全部解压到桌面或「文档」**后双击 `LumixTool.exe`（首次运行 SmartScreen 拦截时点「更多信息 → 仍要运行」）。
 2. **进入服务模式**：相机关机，同时按住机背的回放键（▶）和 `AF-ON` 键不放，再开机，用 USB 连接电脑（设备管理器出现 `04DA:2370` 即成功）。
 3. **安装驱动**（只需一次）：在「连接相机」中点「一键安装驱动」，失败时可参考 [docs/DRIVER_SETUP.md](docs/DRIVER_SETUP.md) 用 Zadig 安装。
 4. **解锁片门全开 / 替换音效**：按界面指引操作；写入完成后用**电源键**关机再开机（**不要拔电池**）即可生效。

@@ -4,11 +4,11 @@
 
 Panasonic LUMIX カメラ向けのローカル・オフラインツールボックスです。サービスモード USB 経由で、**ファームウェア書き換え（フラッシュ書込）なし**に 6K オープンゲート / 録画時間無制限を解除し、AF 合焦音・電子シャッター音・セルフタイマー音など全 28 種のカメラ効果音を自由にカスタマイズできます。
 
-Windows 版と Android 版のどちらでも、初代 DC-S5 で LUT を適用した JPEG 写真を撮影できます。
+Windows 版と Android 版のどちらでも、対応する LUMIX カメラで LUT を適用した JPEG 写真を撮影できます。
 
-**v0.4.3 ダウンロード**　[Windows x64 用 ZIP](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3-win-x64.zip) · [Android 用 APK](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3.apk) · [リリースノートとチェックサム](https://github.com/USER-HFC/Lumix_Tool/releases/tag/v0.4.3)
+**v0.4.3 ダウンロード**　[Windows x64 用 ZIP](https://github.com/LumiMod/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3-win-x64.zip) · [Android 用 APK](https://github.com/LumiMod/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3.apk) · [リリースノートとチェックサム](https://github.com/LumiMod/Lumix_Tool/releases/tag/v0.4.3)
 
-> **対応機種**　Panasonic DC-S5（初代）、公式ファームウェア 2.9。LUT をカメラに直接書き込む機能はベータ版で、実機では未検証です。
+> **現在の対応機種**　現時点では Panasonic DC-S5（初代・公式ファームウェア 2.9）に対応しており、今後さらに多くの LUMIX 機種へ順次対応予定です。LUT をカメラに直接書き込む機能はベータ版で、実機では未検証です。
 
 - カメラ本体の変更は RAM に保存されます。電源スイッチで再起動しても保持されますが、バッテリーを抜くか設定をリセットすると元に戻ります。
 - カスタム効果音はカメラ RAM の空き領域（`0x8F000000`〜）に書き込み、既存スロットを上書きしないよう事前検証します。初回は短い音声で 1 項目だけ試してください。
@@ -28,7 +28,7 @@ Windows 版と Android 版のどちらでも、初代 DC-S5 で LUT を適用し
 
 ## リアルタイム LUT で JPEG 写真を撮る
 
-対象は初代 DC-S5（ファームウェア 2.9）の **JPEG 静止画のみ**です。Windows または Android でカメラを接続し、「リアルタイム LUT」→「機能の有効化」→「有効にする」を選びます。「有効になりました」と表示されたらカメラを操作できます。内蔵の `Vlog_709` を使う場合は、ファイルの準備を省いて下の「カメラでの設定」に進んでください。
+対象は対応機種（現時点では DC-S5 ファームウェア 2.9）の **JPEG 静止画のみ**です。Windows または Android でカメラを接続し、「リアルタイム LUT」→「機能の有効化」→「有効にする」を選びます。「有効になりました」と表示されたらカメラを操作できます。内蔵の `Vlog_709` を使う場合は、ファイルの準備を省いて下の「カメラでの設定」に進んでください。
 
 ![日本語版の「使い方ガイド」で、DC-S5 のメニューの選択位置を示している画面](docs/images/lut-guide-v0.4.2-ja.png)
 
@@ -54,7 +54,7 @@ Windows 版と Android 版のどちらでも、初代 DC-S5 で LUT を適用し
 
 ## Android 版（APK）
 
-Android 8.0 以上・USB OTG 対応スマートフォンから、PC なしで LUMIX DC-S5（v2.9）へ直接接続できます。
+Android 8.0 以上・USB OTG 対応スマートフォンから、PC なしで対応する LUMIX カメラ（現時点では DC-S5 v2.9）へ直接接続できます。
 
 | 画面 | できること |
 |---|---|
@@ -71,12 +71,12 @@ Android 8.0 以上・USB OTG 対応スマートフォンから、PC なしで LU
   <img src="docs/images/android-connection.png" alt="Android 接続ガイド" width="300">
 </p>
 
-**インストール**：[Releases](https://github.com/USER-HFC/Lumix_Tool/releases) から最新の `LumixTool-*.apk` をダウンロードしてインストールしてください。初回起動時に言語を選び、USB OTG でカメラを接続します。
+**インストール**：[Releases](https://github.com/LumiMod/Lumix_Tool/releases) から最新の `LumixTool-*.apk` をダウンロードしてインストールしてください。初回起動時に言語を選び、USB OTG でカメラを接続します。
 
 ## Windows 版 クイックスタート
 
-- **動作環境**：Windows 10 / 11（64-bit）、Panasonic DC-S5（v2.9）、データ転送対応 USB ケーブル（Python はパッケージに同梱済み）。
-1. [Releases](https://github.com/USER-HFC/Lumix_Tool/releases) から `LumixTool-<version>-win-x64.zip` をダウンロードし、デスクトップやドキュメント等へ**すべて展開**して `LumixTool.exe` を起動します。
+- **動作環境**：Windows 10 / 11（64-bit）、対応する Panasonic LUMIX カメラ（現時点では DC-S5 v2.9）、データ転送対応 USB ケーブル（Python はパッケージに同梱済み）。
+1. [Releases](https://github.com/LumiMod/Lumix_Tool/releases) から `LumixTool-<version>-win-x64.zip` をダウンロードし、デスクトップやドキュメント等へ**すべて展開**して `LumixTool.exe` を起動します。
 2. **サービスモードで起動**：カメラの電源を切り、背面の**再生ボタン（▶）と AF-ON** を同時に押したまま電源を ON にし、USB で PC と接続します（`04DA:2370`）。
 3. **ドライバ導入（初回のみ）**：「カメラ接続」からワンクリック導入（失敗時は [docs/DRIVER_SETUP.md](docs/DRIVER_SETUP.md) を参照）。
 4. **反映方法**：効果音の書込完了後、**バッテリーを入れたまま**電源スイッチを OFF → ON にしてお試しください。

@@ -4,9 +4,9 @@
 
 A local, offline toolkit for Panasonic LUMIX cameras. Apply a LUT to JPEG photos as you shoot, unlock 6K Open Gate and unlimited recording, or customize all 28 camera sounds over Service Mode USB. No firmware flashing is required.
 
-**Download v0.4.3**　[Windows x64 ZIP](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3-win-x64.zip) · [Android APK](https://github.com/USER-HFC/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3.apk) · [Release notes and checksums](https://github.com/USER-HFC/Lumix_Tool/releases/tag/v0.4.3)
+**Download v0.4.3**　[Windows x64 ZIP](https://github.com/LumiMod/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3-win-x64.zip) · [Android APK](https://github.com/LumiMod/Lumix_Tool/releases/download/v0.4.3/LumixTool-0.4.3.apk) · [Release notes and checksums](https://github.com/LumiMod/Lumix_Tool/releases/tag/v0.4.3)
 
-> **Supported camera**　Panasonic DC-S5 (Mark I) with official firmware 2.9. Writing a LUT directly to the camera is a beta feature awaiting hardware testing.
+> **Currently supported**　Panasonic DC-S5 (Mark I, official firmware 2.9); support for additional LUMIX models is planned. Writing a LUT directly to the camera is a beta feature awaiting hardware testing.
 
 - Changes to the camera are held in RAM. They survive a power-switch restart and reset when you remove the battery or restore factory settings.
 - Custom sounds are stored in camera scratch RAM (`0x8F000000+`) with free-region guards to avoid overwriting other custom slots. For your first sound replacement, try a short clip in one slot.
@@ -17,7 +17,7 @@ A local, offline toolkit for Panasonic LUMIX cameras. Apply a LUT to JPEG photos
 
 | Tool | Description |
 |---|---|
-| **Real-Time LUT** | Apply a LUT to JPEG photos on the DC-S5. Prepare a LUT offline for an SD card, or write it to a connected camera (Beta). |
+| **Real-Time LUT** | Apply a LUT to JPEG photos on supported LUMIX cameras. Prepare a LUT offline for an SD card, or write it to a connected camera (Beta). |
 | **Sound Replacer** | Full catalog of all 28 camera sound slots (including AF beep `#1–3`, E-Shutter single `#20–22`, E-Shutter burst `#11–13`, Self-Timer `#0`, etc.) with one-click common presets, single/batch write, and stock restore. Accepts wav / mp3 / m4a / flac / ogg / opus and auto-converts to 44.1 kHz mono (up to 3 seconds). |
 | **Open Gate Unlock** | One-click unlock for 6K 3:2 Open Gate (`5952×3968`), 5.9K 16:9 (`5888×3312`) 23.98p 10-bit HEVC, and unlimited recording in all time-limited modes — plus one-click restore. Verifies 13 firmware anchors before patching 19 volatile RAM halfwords. |
 | **Memory Diagnostics** | Read-only scan of camera scratch RAM with a visual map of free/used regions and JSON export. |
@@ -28,7 +28,7 @@ A local, offline toolkit for Panasonic LUMIX cameras. Apply a LUT to JPEG photos
 
 Open **Real-Time LUT** on Windows or Android. The look applies to JPEG photos only. When shooting RAW+FINE, look for the graded image in the accompanying JPEG.
 
-1. Under **Camera activation**, connect the DC-S5 over USB and select **Activate**. Keep the cable connected until **Activation complete** appears.
+1. Under **Camera activation**, connect your camera over USB and select **Activate**. Keep the cable connected until **Activation complete** appears.
 2. Under **LUT transfer**, use **Choose LUT file** for either `.cube` or `.vlt`. Choose **Export VLT for SD card** to save a copy offline, then put it in the root of the card. Use up to eight letters or digits before the extension, as in `LOOK01.VLT`. For a temporary copy, select **Write to camera** and choose a slot. Direct writing is **Beta and has not been tested on hardware**. The slot keeps its original menu name.
 3. In **Camera guide**, follow **Import from SD card** or **Use an in-camera LUT**. When importing, choose the card, the file and one of the four registration slots. Confirming an occupied slot overwrites its LUT. Select your LUT in **LUT Select**, turn on **LUT View Assist (Monitor)**, and set **Photo Style** to **V-Log**. Use FINE or RAW+FINE to shoot the JPEG. The built-in `Vlog_709` needs no file import.
 
@@ -40,7 +40,7 @@ Open **Real-Time LUT** on Windows or Android. The look applies to JPEG photos on
 
 ## Android App (APK)
 
-Connect your Android phone (Android 8.0+ with USB OTG) directly to a Panasonic LUMIX DC-S5 (v2.9) offline:
+Connect your Android phone (Android 8.0+ with USB OTG) directly to a supported Panasonic LUMIX camera (currently DC-S5 v2.9) offline:
 
 | Screen | What you can do |
 |---|---|
@@ -57,14 +57,14 @@ These screenshots show the home screen and USB connection guide from an earlier 
   <img src="docs/images/android-connection.png" alt="Android button connection guide" width="300">
 </p>
 
-**Install**: Download the latest `LumixTool-*.apk` from [Releases](https://github.com/USER-HFC/Lumix_Tool/releases), allow installation from unknown sources, choose your language on first launch, and connect via USB OTG.
+**Install**: Download the latest `LumixTool-*.apk` from [Releases](https://github.com/LumiMod/Lumix_Tool/releases), allow installation from unknown sources, choose your language on first launch, and connect via USB OTG.
 
 ## Windows Quick Start
 
 ![Windows v0.3.2 camera connection guide](docs/images/windows-0.3.2-connection.png)
 
-- **Requirements**: Windows 10 / 11 (64-bit), Panasonic DC-S5 (v2.9), data-capable USB cable. Python is bundled in the release zip.
-1. Download `LumixTool-<version>-win-x64.zip` from [Releases](https://github.com/USER-HFC/Lumix_Tool/releases), **extract all files** to Desktop or Documents, and run `LumixTool.exe`.
+- **Requirements**: Windows 10 / 11 (64-bit), a supported Panasonic LUMIX camera (currently DC-S5 v2.9), data-capable USB cable. Python is bundled in the release zip.
+1. Download `LumixTool-<version>-win-x64.zip` from [Releases](https://github.com/LumiMod/Lumix_Tool/releases), **extract all files** to Desktop or Documents, and run `LumixTool.exe`.
 2. **Enter Service Mode**: Power off the camera, hold **Playback (▶) + AF-ON** together, switch power **ON**, and connect USB (`04DA:2370`).
 3. **Install WinUSB Driver** (once): Click "One-Click Install Driver" in Connect Camera (or use Zadig per [docs/DRIVER_SETUP.md](docs/DRIVER_SETUP.md)).
 4. **Apply & Warm Reboot**: After writing sounds, toggle the **power switch OFF and ON** (do **not** remove the battery) for changes to take effect.
